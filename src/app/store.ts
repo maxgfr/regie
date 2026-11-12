@@ -250,7 +250,15 @@ export class Store extends TypedEventTarget<Events> {
           const runtime = this.runtime.get(id)
           if (runtime) runtime.latency = seconds
         },
-        adHint: (on) => this.#adSignal(id, { type: 'hint', on }),
+        adHint: (on) => {
+          const runtime = this.runtime.get(id)
+          // A player that opens on a pre-roll ad has started, even if "playing" only comes after the ad.
+          if (on && runtime && !runtime.played) {
+            runtime.played = true
+            if (this.ui.warmup?.id === id) setTimeout(() => this.#nextWarmup(id), 1200)
+          }
+          this.#adSignal(id, { type: 'hint', on })
+        },
       },
     })
     if (player) {
