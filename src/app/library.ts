@@ -35,7 +35,8 @@ export interface Preferences {
   chatOpen: boolean
   keywords: string[]
   autoAdd: boolean
-  adReload: boolean
+  /** The session's `adReload`. */
+  reloadAds: boolean
 }
 
 export interface Backup {
@@ -163,7 +164,7 @@ export function savePreferences(session: Session) {
     chatOpen,
     keywords,
     autoAdd,
-    adReload,
+    reloadAds: adReload,
   })
 }
 

@@ -147,6 +147,12 @@ describe('ads', () => {
     expect(noteAd({}, false, 5000).failedAt).toBeUndefined()
   })
 
+  test('an ad the player reported holds past the timeout, until the player ends it', () => {
+    const state = adReducer(initialAdState(0), { type: 'hint', on: true }, 0)
+    expect(adTick(state, 200_000, true).inAd).toBe(true)
+    expect(adReducer(state, { type: 'hint', on: false }, 200_000).inAd).toBe(false)
+  })
+
   test('a manual mark holds until removed or timed out', () => {
     let state = adReducer(initialAdState(0), { type: 'manual', on: true }, 0)
     state = adReducer(state, { type: 'progress', time: 5 }, 100)

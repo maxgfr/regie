@@ -204,7 +204,7 @@ export const en = {
   'tile.badgeOffline': 'Offline',
   'help.adReload': 'Reload a player that goes to an ad',
   'help.adReloadHint':
-    'Only once the ad is confirmed and only for a mid-roll: a fresh player sometimes comes back without it. Once every five minutes at most, and if the fresh player opens on an ad again, the ads of that stream simply play for a while.',
+    'Off by default: a reload cuts the stream for a few seconds. When on, only for a confirmed mid-roll: a fresh player sometimes comes back without it. Once every five minutes at most, and if the fresh player opens on an ad again, the ads of that stream simply play for a while.',
   'drop.hint': 'Drop the link to add the stream',
 } as const
 

@@ -98,12 +98,12 @@ window.Twitch = { Player: class {
   }
   addEventListener(event, cb) { (this.listeners[event] ??= []).push(cb) }
   emit(event) { for (const cb of this.listeners[event] ?? []) cb() }
-  setVolume() {} setMuted() {} play() {} pause() {} seek() {}
+  setVolume() {} setMuted() {} play() { this.plays = (this.plays ?? 0) + 1 } pause() {} seek() {}
   getCurrentTime() { return 0 } isPaused() { return false }
   getPlaybackStats() { return {} } getQualities() { return [] } setQuality() {}
 } }`
 
-type FakePlayer = { emit(event: string): void; iframe: HTMLIFrameElement }
+type FakePlayer = { emit(event: string): void; iframe: HTMLIFrameElement; plays?: number }
 
 /** Sends the UPDATE_STATE message the real Twitch iframe posts to its host page. */
 function twitchUpdate(page: Page, index: number, params: Record<string, unknown>) {
@@ -123,11 +123,12 @@ function twitchUpdate(page: Page, index: number, params: Record<string, unknown>
 }
 
 /** Mounts two fake Twitch players; `play` lists the ones that already showed the stream. */
-async function twitchWall(page: Page, play: number[]) {
+async function twitchWall(page: Page, play: number[], options = '') {
+  await page.clock.install()
   await page.route('https://player.twitch.tv/js/embed/v1.js', (route) =>
     route.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE_TWITCH }),
   )
-  await page.goto('/#s=tw.alpha|tw.beta&l=focus')
+  await page.goto(`/#s=tw.alpha|tw.beta&l=focus${options}`)
   await expect(page.locator('[data-tile]')).toHaveCount(2)
   await page.waitForFunction(() => (window as unknown as { __players?: unknown[] }).__players?.length === 2)
   await page.evaluate((play) => {
@@ -142,29 +143,29 @@ async function twitchWall(page: Page, play: number[]) {
 const players = (page: Page) =>
   page.evaluate(() => (window as unknown as { __players?: unknown[] }).__players?.length ?? 0)
 
-/** "Buffering" with tens of seconds buffered, for more than three seconds: how a Twitch ad shows up. */
+/** "Buffering" with tens of seconds buffered, for more than eight seconds: an ad that holds the stream. */
 async function twitchAd(page: Page, index: number) {
   const ad = { playback: 'Buffering', stats: { videoStats: { fps: 7, bufferSize: 43.2 } }, muted: true }
   await twitchUpdate(page, index, ad)
-  await page.waitForTimeout(3200)
+  await page.clock.fastForward(8200)
   await twitchUpdate(page, index, ad)
 }
 
 test('a Twitch player that reports an ad gets the badge, the sound moves, and one reload', async ({ page }) => {
-  await page.clock.install()
-  await twitchWall(page, [0, 1])
+  // Reloading for ads is off unless asked for (`ar=1`): a reload cuts the stream.
+  await twitchWall(page, [0, 1], '&ar=1')
   // Both have shown their stream for a while: the next ad is a mid-roll.
   await page.clock.fastForward(40_000)
-  // A paused live player keeps reporting frames for a few seconds: that is not an ad.
+  // A paused live player keeps reporting frames for a few seconds: that is never an ad.
   const paused = { playback: 'Idle', stats: { videoStats: { fps: 31, bufferSize: 130 } }, muted: true }
   await twitchUpdate(page, 0, paused)
-  await page.waitForTimeout(3200)
+  await page.clock.fastForward(12_000)
   await twitchUpdate(page, 0, paused)
   await expect(page.locator('[data-tile]').first()).toHaveAttribute('data-ad', 'false')
   await twitchAd(page, 0)
   await expect(page.locator('[data-tile]').first()).toHaveAttribute('data-ad', 'true')
   await expect(page.locator('[data-tile]').nth(1)).toHaveAttribute('data-tally', 'pgm')
-  // adReload is on by default: a mid-roll is reloaded once it is confirmed.
+  // A mid-roll is reloaded once it is confirmed.
   await page.waitForFunction(() => (window as unknown as { __players?: unknown[] }).__players?.length === 3, null, {
     timeout: 8000,
   })
@@ -178,13 +179,44 @@ test('a Twitch player that reports an ad gets the badge, the sound moves, and on
   await expect(page.locator('[data-tile]').first()).toHaveAttribute('data-ad', 'false')
 })
 
+test('by default an ad is never reloaded: a reload cuts the stream', async ({ page }) => {
+  await twitchWall(page, [0, 1])
+  await page.clock.fastForward(40_000)
+  await twitchAd(page, 0)
+  await expect(page.locator('[data-tile]').first()).toHaveAttribute('data-ad', 'true')
+  await page.clock.fastForward(6000)
+  expect(await players(page)).toBe(2)
+})
+
 test('a pre-roll ad is not reloaded: a fresh player would only start it again', async ({ page }) => {
   // The first player never showed the stream: its ad is a pre-roll.
-  await twitchWall(page, [1])
+  await twitchWall(page, [1], '&ar=1')
   await twitchAd(page, 0)
   await expect(page.locator('[data-tile]').first()).toHaveAttribute('data-ad', 'true')
   await page.waitForTimeout(5000)
   expect(await players(page)).toBe(2)
+})
+
+test('a Twitch player that stops on its own is started again, unless the wall was paused', async ({ page }) => {
+  await twitchWall(page, [0, 1])
+  const plays = () =>
+    page.evaluate(() => (window as unknown as { __players: FakePlayer[] }).__players.map((p) => p.plays ?? 0))
+  const before = await plays()
+  // Twitch paused the first player (another window in front, another monitor in full screen…).
+  await page.evaluate(() => (window as unknown as { __players: FakePlayer[] }).__players[0]?.emit('pause'))
+  // A short pause is a rebuffer: left alone.
+  await page.clock.fastForward(1000)
+  expect((await plays())[0]).toBe(before[0])
+  await page.clock.fastForward(3000)
+  await expect.poll(async () => (await plays())[0]).toBeGreaterThan(before[0] ?? 0)
+  // Paused with Regie's own key: it stays paused.
+  await page.evaluate(() => {
+    ;(window as unknown as { regie: { pauseAll(): void } }).regie.pauseAll()
+    ;(window as unknown as { __players: FakePlayer[] }).__players[1]?.emit('pause')
+  })
+  const held = await plays()
+  await page.clock.fastForward(10_000)
+  expect((await plays())[1]).toBe(held[1])
 })
 
 test('sync mode marks streams from the label strip', async ({ page }) => {

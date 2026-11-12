@@ -56,9 +56,14 @@ export function adReducer(state: AdState, signal: AdSignal, now: number): AdStat
   }
 }
 
-/** Called on a timer: turns a frozen clock into a stall, and ends ads that last too long. */
+/**
+ * Called on a timer: turns a frozen clock into a stall, and ends guessed ads that last too long. An ad the
+ * player itself reported ends when the player says so: Twitch ad breaks can run past the timeout.
+ */
 export function adTick(state: AdState, now: number, playing: boolean): AdState {
-  if (state.inAd && now - state.since > AD_TIMEOUT_MS) return { ...state, inAd: false, source: null }
+  if (state.inAd && state.source !== 'hint' && now - state.since > AD_TIMEOUT_MS) {
+    return { ...state, inAd: false, source: null }
+  }
   if (!state.inAd && playing && state.lastTime !== undefined && now - state.lastProgressAt > STALL_MS) {
     return adReducer(state, { type: 'stall' }, now)
   }

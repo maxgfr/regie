@@ -46,7 +46,7 @@ export function defaultSession(): Session {
     autoDirector: false,
     adSwitch: true,
     autoAdd: false,
-    adReload: true,
+    adReload: false,
   }
 }
 
@@ -117,7 +117,7 @@ export function encodeSession(session: Session): string {
   if (session.autoDirector) params.set('ad', '1')
   if (!session.adSwitch) params.set('as', '0')
   if (session.autoAdd) params.set('aa', '1')
-  if (!session.adReload) params.set('ar', '0')
+  if (session.adReload) params.set('ar', '1')
   return params.toString()
 }
 

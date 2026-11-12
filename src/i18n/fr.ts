@@ -212,6 +212,6 @@ export const fr: Record<MessageKey, string> = {
   'tile.badgeOffline': 'Hors ligne',
   'help.adReload': 'Recharger un player qui passe en pub',
   'help.adReloadHint':
-    'Seulement une fois la pub confirmée, et seulement en cours de stream : un player neuf revient parfois sans. Une fois toutes les cinq minutes au plus, et si le player neuf retombe sur une pub, les pubs de ce stream passent normalement pendant un moment.',
+    'Désactivé par défaut : un rechargement coupe le stream quelques secondes. Activé, seulement pour une pub confirmée en cours de stream : un player neuf revient parfois sans. Une fois toutes les cinq minutes au plus, et si le player neuf retombe sur une pub, les pubs de ce stream passent normalement pendant un moment.',
   'drop.hint': 'Lâchez le lien pour ajouter le stream',
 }

@@ -52,18 +52,26 @@ export const TWITCH_MIN_HEIGHT = 300
 
 /**
  * Ads, as the player's state messages show them (observed, undocumented):
- * - `Playing` with no broadcaster latency: an ad plays (a live stream always reports how far behind the
- *   broadcaster it is; an ad has no broadcaster). Held for `AD_RUNNING_MS`, live streams only.
+ * - `Playing` while the stream's own clock stands still: a mid-roll plays over it ("commercial break in
+ *   progress"), its clock frozen for `AD_FROZEN_MS`. Live streams only.
+ * - `Playing` with no broadcaster latency: a pre-roll plays (a live stream reports how far behind the
+ *   broadcaster it is; an ad has no broadcaster). A stream that shows no latency for longer than any ad
+ *   break (`AD_BREAK_MAX_MS`) simply doesn't report one: from then on, a latency of 0 means nothing for it.
+ * Both held for `AD_RUNNING_MS`.
  * - `Buffering` while the buffer holds many seconds: the stream waits behind an ad that doesn't move. A real
- *   stall has an empty buffer. Held for `AD_SIGNAL_MS`.
- * - `Idle` while frames keep coming. A paused live player looks the same for about seven seconds, so this
- *   one only counts after `AD_IDLE_MS`, and never after a pause Regie sent.
+ *   stall has an empty buffer. Held for `AD_STUCK_MS`.
+ *
+ * A paused player is never an ad (it reads `Idle`, frames still counted for a few seconds), and nothing is
+ * read while the page is hidden: the browser and Twitch pause what nobody sees. A wrong "ad" moves the
+ * sound away and may reload the player, so every signal errs on the side of "not an ad".
  */
-export const AD_RUNNING_MS = 4000
-export const AD_SIGNAL_MS = 3000
-export const AD_IDLE_MS = 10_000
+export const AD_RUNNING_MS = 3000
+export const AD_FROZEN_MS = 2000
+export const AD_BREAK_MAX_MS = 200_000
+export const AD_STUCK_MS = 8000
+/** Without any signal for this long, an ad is over even if the stream isn't playing yet. */
+export const AD_GONE_MS = 3000
 export const AD_MIN_BUFFER_S = 10
-export const AD_MIN_FPS = 10
 /** Below this much buffer, a rebuffer is a real stall: the connection didn't keep up. */
 const STALL_BUFFER_S = 0.5
 /** Leave the quality change a moment to settle before reading a rebuffer as a stall. */
@@ -95,8 +103,12 @@ export function createTwitchPlayer(context: PlayerContext): Player {
   let inAd = false
   let adKind: AdSignature = null
   let adSince = 0
-  let pausedByRegie = false
   let lastPlayback = ''
+  let latencyKnown = false
+  let latencyless = false
+  // The stream's own clock: it stands still while an ad plays over it.
+  let lastTime: number | undefined
+  let timeMovedAt = Date.now()
   const live = source.kind !== 'vod'
   // Since when the stream itself (not an ad) has been playing without a break.
   let contentSince: number | null = null
@@ -153,7 +165,10 @@ export function createTwitchPlayer(context: PlayerContext): Player {
     const update = readUpdate(event.data)
     if (!update) return
     const now = Date.now()
-    if (update.latency && update.latency > 0) events.latency(update.latency)
+    if (update.latency && update.latency > 0) {
+      latencyKnown = true
+      events.latency(update.latency)
+    }
     // A rebuffer with an empty buffer at a quality Regie forced: the connection may not keep up with it.
     if (update.playback === 'Buffering' && lastPlayback === 'Playing' && quality !== 'auto' && !inAd) {
       if (now - switchedAt > SWITCH_SETTLE_MS && (update.buffer ?? 0) < STALL_BUFFER_S) {
@@ -163,17 +178,25 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       }
     }
     lastPlayback = update.playback
-    const content = update.playback === 'Playing' && (!live || update.latency === undefined || update.latency > 0)
+    if (update.time !== undefined && update.time !== lastTime) {
+      lastTime = update.time
+      timeMovedAt = now
+    }
+    const frozenMs = update.playback === 'Playing' && update.time !== undefined ? now - timeMovedAt : 0
+    const content =
+      update.playback === 'Playing' &&
+      frozenMs < AD_FROZEN_MS &&
+      (!live || update.latency === undefined || update.latency > 0)
     contentSince = content ? (contentSince ?? now) : null
-    let signature = adSignature(update, live)
-    if (signature === 'idle' && pausedByRegie) signature = null
+    const signature = document.hidden ? null : adSignature(update, { live, zeroLatencyIsAd: !latencyless, frozenMs })
     if (signature !== adKind) {
       adKind = signature
       adSince = now
     }
-    const hold = adKind === 'idle' ? AD_IDLE_MS : adKind === 'running' ? AD_RUNNING_MS : AD_SIGNAL_MS
-    const held = adKind !== null && now - adSince >= hold
-    const ad = held ? true : content ? false : inAd
+    if (adKind === 'running' && !latencyKnown && now - adSince > AD_BREAK_MAX_MS) latencyless = true
+    const held = adKind !== null && now - adSince >= (adKind === 'running' ? AD_RUNNING_MS : AD_STUCK_MS)
+    const gone = adKind === null && now - adSince >= AD_GONE_MS
+    const ad = held ? true : content || gone ? false : inAd
     if (ad !== inAd) {
       inAd = ad
       if (!ad) playing = true
@@ -223,7 +246,6 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       instance.addEventListener(Twitch.Player.PLAYING, () => {
         const first = !playing
         playing = true
-        pausedByRegie = false
         if (first) apply()
         // The quality waits for the stream itself: this "playing" may well be the start of a pre-roll.
         events.state('playing', true)
@@ -263,13 +285,10 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       apply()
     },
     play() {
-      pausedByRegie = false
       if (ready) player?.play()
     },
     pause() {
-      if (!ready) return
-      pausedByRegie = true
-      player?.pause()
+      if (ready) player?.pause()
     },
     seekBy(seconds) {
       if (!player || !ready || source.kind !== 'vod') return false
@@ -294,6 +313,8 @@ export function createTwitchPlayer(context: PlayerContext): Player {
 interface TwitchUpdate {
   playback: string
   fps: number
+  /** The stream's own clock, in seconds. */
+  time?: number
   /** Seconds of video buffered ahead. */
   buffer?: number
   latency?: number
@@ -301,14 +322,27 @@ interface TwitchUpdate {
   volume?: number
 }
 
-type AdSignature = 'running' | 'buffering' | 'idle' | null
+type AdSignature = 'running' | 'stuck' | null
 
-/** Which ad signature a state message shows, if any (see `AD_RUNNING_MS`, `AD_SIGNAL_MS`, `AD_IDLE_MS`). */
-export function adSignature(update: TwitchUpdate | null, live = true): AdSignature {
+/**
+ * Which ad signature a state message shows, if any (see `AD_RUNNING_MS` and `AD_STUCK_MS`). `zeroLatencyIsAd`:
+ * false for a stream that never reports a latency. `frozenMs`: how long the stream's clock has stood still
+ * while playing.
+ */
+export function adSignature(
+  update: TwitchUpdate | null,
+  {
+    live = true,
+    zeroLatencyIsAd = true,
+    frozenMs = 0,
+  }: { live?: boolean; zeroLatencyIsAd?: boolean; frozenMs?: number } = {},
+): AdSignature {
   if (!update) return null
-  if (live && update.playback === 'Playing' && update.latency === 0 && update.fps > 0) return 'running'
-  if (update.playback === 'Buffering' && (update.buffer ?? 0) >= AD_MIN_BUFFER_S) return 'buffering'
-  if (update.playback === 'Idle' && update.fps >= AD_MIN_FPS) return 'idle'
+  if (live && update.playback === 'Playing' && update.fps > 0) {
+    if (frozenMs >= AD_FROZEN_MS) return 'running'
+    if (zeroLatencyIsAd && update.latency === 0) return 'running'
+  }
+  if (update.playback === 'Buffering' && (update.buffer ?? 0) >= AD_MIN_BUFFER_S) return 'stuck'
   return null
 }
 
@@ -317,7 +351,7 @@ export function readUpdate(data: unknown): TwitchUpdate | null {
   if (!data || typeof data !== 'object') return null
   const message = data as { eventName?: unknown; params?: Record<string, unknown> }
   if (message.eventName !== 'UPDATE_STATE' || !message.params) return null
-  const { playback, stats, muted, volume } = message.params
+  const { playback, stats, muted, volume, currentTime } = message.params
   if (typeof playback !== 'string') return null
   const video = (
     stats as { videoStats?: { fps?: unknown; bufferSize?: unknown; hlsLatencyBroadcaster?: unknown } } | undefined
@@ -325,6 +359,7 @@ export function readUpdate(data: unknown): TwitchUpdate | null {
   return {
     playback,
     fps: typeof video?.fps === 'number' ? video.fps : 0,
+    time: typeof currentTime === 'number' ? currentTime : undefined,
     buffer: typeof video?.bufferSize === 'number' ? video.bufferSize : undefined,
     latency: typeof video?.hlsLatencyBroadcaster === 'number' ? video.hlsLatencyBroadcaster : undefined,
     muted: typeof muted === 'boolean' ? muted : undefined,

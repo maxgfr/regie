@@ -23,7 +23,8 @@ Built for the evening when a tournament runs on five channels at once: the main 
 - **Ads.**
   - When the stream on air goes to an ad, the sound moves to another stream (the one with the busiest chat if Regie can tell) and comes back when the ad ends.
   - Ads stay silent.
-  - A Twitch player that goes to a mid-roll ad is reloaded, on its own, once the ad is confirmed: a fresh player sometimes comes back without it. Never for a pre-roll (a reload would only restart it), at most once per stream every five minutes, and when the fresh player opens on an ad again, the ads of that stream simply play (silent, covered) for a quarter of an hour. This can be turned off in the help sheet.
+  - Ads play out on their own: Regie never touches a player during one (no quality change, no pause). A Twitch player that Twitch paused because it couldn't see it (another window in front, full screen elsewhere) is started again once it can be seen.
+  - Optionally (help sheet, off by default because a reload cuts the stream), a Twitch player that goes to a mid-roll ad is reloaded once the ad is confirmed: a fresh player sometimes comes back without it. Never for a pre-roll, at most once per stream every five minutes, and when the fresh player opens on an ad again, the ads of that stream simply play for a quarter of an hour.
   - Twitch only runs an ad while its player is large and visible, after a click in the player. So a small stream in an ad is shown large, next to the main monitor, until the ad ends, and a notice asks for that one click.
   - On Twitch, ads are read from the player's own state messages. Elsewhere, Regie watches for a stream whose clock stops while it should be playing. You can also press `A`.
 - **Line check.** Twitch won't autoplay a player smaller than 400 × 300. A small Twitch monitor is shown large for a moment until it starts, then goes back to its place.

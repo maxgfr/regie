@@ -52,6 +52,10 @@ export interface TileRuntime {
   watchedAt?: number
   /** A `play()` was already sent to a player that didn't start on its own. */
   retried?: boolean
+  /** Since when the player has been paused (Twitch also sends a pause for a short rebuffer). */
+  pausedAt?: number
+  /** Last time Regie restarted a player that stopped on its own. */
+  resumedAt?: number
   /** Title from the platform's oEmbed, when it has one. */
   title?: string
   /** Live status, title, category and audience of a Twitch or Kick channel. */
@@ -70,6 +74,10 @@ function safely<T>(call: () => T): T | undefined {
 }
 
 const LAYOUT_CYCLE: LayoutMode[] = ['grid', 'focus', 'theater']
+/** A Twitch pause shorter than this is a rebuffer. */
+const RESUME_AFTER_MS = 3000
+/** Between two attempts to restart the same player. */
+const RESUME_EVERY_MS = 5000
 const MAX_CHAT = 400
 const FADE_MS = 600
 
@@ -157,17 +165,12 @@ export class Store extends TypedEventTarget<Events> {
     if (typeof saved.audioMode === 'string' && modes.includes(saved.audioMode)) base.audioMode = saved.audioMode
     if (saved.transition === 'cut' || saved.transition === 'mix') base.transition = saved.transition
     if (typeof saved.duck === 'number' && saved.duck >= 0 && saved.duck <= 1) base.duck = saved.duck
-    for (const key of [
-      'liveChat',
-      'antiSpoiler',
-      'autoDirector',
-      'adSwitch',
-      'chatOpen',
-      'autoAdd',
-      'adReload',
-    ] as const) {
+    for (const key of ['liveChat', 'antiSpoiler', 'autoDirector', 'adSwitch', 'chatOpen', 'autoAdd'] as const) {
       if (typeof saved[key] === 'boolean') base[key] = saved[key]
     }
+    // Saved under a new name: reloading for ads used to be on by default, and an old saved "on" must not
+    // bring back reloads that cut the stream.
+    if (typeof saved.reloadAds === 'boolean') base.adReload = saved.reloadAds
     if (Array.isArray(saved.keywords)) base.keywords = saved.keywords.filter((w) => typeof w === 'string').slice(0, 20)
     return base
   }
@@ -349,6 +352,7 @@ export class Store extends TypedEventTarget<Events> {
           const runtime = this.runtime.get(id)
           if (!runtime) return
           runtime.state = state
+          runtime.pausedAt = state === 'paused' ? (runtime.pausedAt ?? Date.now()) : undefined
           if (state === 'playing') {
             this.#resend.add(id)
             if (!runtime.played && this.ui.warmup?.id === id) setTimeout(() => this.#nextWarmup(id), 1200)
@@ -831,12 +835,38 @@ export class Store extends TypedEventTarget<Events> {
     else this.#fade = null
   }
 
+  /** The viewer paused the wall with Regie's own key: nothing is restarted behind their back. */
+  #holding = false
+
   playAll() {
+    this.#holding = false
     for (const player of this.players.values()) safely(() => player.play())
   }
 
   pauseAll() {
+    this.#holding = true
     for (const player of this.players.values()) safely(() => player.pause())
+  }
+
+  /**
+   * Twitch pauses a player it can't see: another window or tab in front, another monitor in full screen, a
+   * moment of layout change. Nothing would start it again, so a Twitch player that has played and has been
+   * paused for a few seconds is restarted once it can be seen again, unless the viewer paused the wall.
+   */
+  #resumePaused(now: number) {
+    if (this.#holding || document.hidden) return
+    const fullscreen = document.fullscreenElement
+    for (const [id, runtime] of this.runtime) {
+      if (runtime.state !== 'paused' || !runtime.played || runtime.pausedAt === undefined) continue
+      if (now - runtime.pausedAt < RESUME_AFTER_MS || now - (runtime.resumedAt ?? 0) < RESUME_EVERY_MS) continue
+      if (this.tile(id)?.source.platform !== 'twitch') continue
+      const container = this.#containers.get(id)
+      if (fullscreen && container && !fullscreen.contains(container)) continue
+      const player = this.players.get(id)
+      if (!player) continue
+      runtime.resumedAt = now
+      safely(() => player.play())
+    }
   }
 
   /** Moves every seekable tile by the same amount, keeping their offsets (multi-POV replays). */
@@ -1077,6 +1107,7 @@ export class Store extends TypedEventTarget<Events> {
         }
       }
     }
+    this.#resumePaused(now)
     // Twitch sometimes leaves a player "ready" without starting it: ask once more after 10 s.
     for (const [id, runtime] of this.runtime) {
       if (runtime.played || runtime.retried || runtime.chanceAt === undefined || now - runtime.chanceAt < 10_000)
