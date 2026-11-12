@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: "22"
       # Conventional commits decide the bump (feat → minor, fix → patch, BREAKING CHANGE → major); the release
       # is a tag plus a GitHub release with notes, nothing is committed back.
       - run: >-

@@ -46,7 +46,6 @@ export function createTwitchPlayer(context: PlayerContext): Player {
   let ready = false
   let destroyed = false
   let wanted = context.initialVolume
-  let ourPause = false
   let timer: ReturnType<typeof setInterval> | undefined
   const element = document.createElement('div')
   element.style.cssText = 'width:100%;height:100%'
@@ -159,10 +158,7 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       })
       instance.addEventListener(Twitch.Player.PLAY, () => events.state('buffering', true))
       // Ads come from the player's state messages; a Twitch pause is never read as an ad.
-      instance.addEventListener(Twitch.Player.PAUSE, () => {
-        events.state('paused', false)
-        ourPause = false
-      })
+      instance.addEventListener(Twitch.Player.PAUSE, () => events.state('paused', false))
       instance.addEventListener(Twitch.Player.ENDED, () => events.state('ended', true))
       instance.addEventListener(Twitch.Player.OFFLINE, () => events.state('offline', true))
       instance.addEventListener(Twitch.Player.ONLINE, () => events.state('buffering', true))
@@ -188,9 +184,7 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       if (ready) player?.play()
     },
     pause() {
-      if (!ready) return
-      ourPause = true
-      player?.pause()
+      if (ready) player?.pause()
     },
     seekBy(seconds) {
       if (!player || !ready || source.kind !== 'vod') return false

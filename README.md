@@ -60,15 +60,15 @@ Built for the evening when a tournament runs on five channels at once: the main 
 
 Regie only uses official embeds, so it can only do what each player allows:
 
-| Platform | Volume | Seek / delay | Chat | Notes |
-| --- | --- | --- | --- | --- |
-| Twitch | ✓ | VODs only | official frame + merged | live latency and ad state from the player |
-| YouTube | ✓ | ✓ (live DVR too) | official frame | titles through oEmbed |
-| Kick | mute only (reloads the player) | – | official frame | live status through Kick's public API |
-| TikTok | mute only | ✓ | – | videos only: **TikTok LIVE can't be embedded**, it opens in its own window |
-| Vimeo | ✓ | – | – | |
-| Dailymotion | mute only (reload) | – | – | |
-| HLS / MP4 link | ✓ | ✓ | – | played with hls.js where HLS isn't native |
+| Platform       | Volume                         | Seek / delay     | Chat                    | Notes                                                                      |
+| -------------- | ------------------------------ | ---------------- | ----------------------- | -------------------------------------------------------------------------- |
+| Twitch         | ✓                              | VODs only        | official frame + merged | live latency and ad state from the player                                  |
+| YouTube        | ✓                              | ✓ (live DVR too) | official frame          | titles through oEmbed                                                      |
+| Kick           | mute only (reloads the player) | –                | official frame          | live status through Kick's public API                                      |
+| TikTok         | mute only                      | ✓                | –                       | videos only: **TikTok LIVE can't be embedded**, it opens in its own window |
+| Vimeo          | ✓                              | –                | –                       |                                                                            |
+| Dailymotion    | mute only (reload)             | –                | –                       |                                                                            |
+| HLS / MP4 link | ✓                              | ✓                | –                       | played with hls.js where HLS isn't native                                  |
 
 - **Ads can't be blocked from a page.** Players are other sites, and Twitch puts its ads inside the video itself. Every site that embeds Twitch's player shows its ads, and the remaining workarounds are extensions, userscripts or proxies. Regie keeps ads silent and takes the sound elsewhere instead. To block ads, use a browser extension such as [uBlock Origin](https://ublockorigin.com/).
 - **Twitch ads wait for a click.** Twitch starts its ads paused. A page can't click inside another site's player, and the player API's `play()` doesn't start an ad either: one click on play in that player does.

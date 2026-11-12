@@ -12,18 +12,18 @@ The gallery of a TV control room, specifically its **multiviewer wall** and **vi
 
 ## Palette
 
-| Token | Value | Use |
-|---|---|---|
-| `--ground` | `#0b0c0d` | wall behind the monitors |
-| `--panel` | `#141618` | console, chat column |
-| `--key` | `#1d2023` | unlit keys, inputs |
-| `--line` | `#2a2e32` | separators, bezel edges |
-| `--text` | `#e6e8e3` | labels |
-| `--dim` | `#9097a0` | secondary text (≥ 4.5:1 on panel) |
-| `--pgm` | `#ff3b30` | on air, red tally |
-| `--pvw` | `#2fd36b` | main monitor, green tally |
-| `--amber` | `#ffb020` | ads, warnings, delay badges, focus ring |
-| `--signal` | `#5ac8fa` | merged-chat channel accent fallback |
+| Token      | Value     | Use                                     |
+| ---------- | --------- | --------------------------------------- |
+| `--ground` | `#0b0c0d` | wall behind the monitors                |
+| `--panel`  | `#141618` | console, chat column                    |
+| `--key`    | `#1d2023` | unlit keys, inputs                      |
+| `--line`   | `#2a2e32` | separators, bezel edges                 |
+| `--text`   | `#e6e8e3` | labels                                  |
+| `--dim`    | `#9097a0` | secondary text (≥ 4.5:1 on panel)       |
+| `--pgm`    | `#ff3b30` | on air, red tally                       |
+| `--pvw`    | `#2fd36b` | main monitor, green tally               |
+| `--amber`  | `#ffb020` | ads, warnings, delay badges, focus ring |
+| `--signal` | `#5ac8fa` | merged-chat channel accent fallback     |
 
 Dark comes from the use scene: video watched for hours, often at night. The chrome stays quiet so the pictures lead; colour is reserved for state (tally, ads).
 
