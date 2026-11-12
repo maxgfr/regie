@@ -35,6 +35,7 @@ export interface Preferences {
   chatOpen: boolean
   keywords: string[]
   autoAdd: boolean
+  adReload: boolean
 }
 
 export interface Backup {
@@ -138,8 +139,19 @@ export function preferences(): Partial<Preferences> {
 }
 
 export function savePreferences(session: Session) {
-  const { audioMode, transition, duck, liveChat, antiSpoiler, autoDirector, adSwitch, chatOpen, keywords, autoAdd } =
-    session
+  const {
+    audioMode,
+    transition,
+    duck,
+    liveChat,
+    antiSpoiler,
+    autoDirector,
+    adSwitch,
+    chatOpen,
+    keywords,
+    autoAdd,
+    adReload,
+  } = session
   write(KEYS.preferences, {
     audioMode,
     transition,
@@ -151,6 +163,7 @@ export function savePreferences(session: Session) {
     chatOpen,
     keywords,
     autoAdd,
+    adReload,
   })
 }
 

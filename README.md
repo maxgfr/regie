@@ -19,9 +19,11 @@ Built for the evening when a tournament runs on five channels at once: the main 
   - **Manual**: one fader per stream.
   - Switching can be a **cut** or a 600 ms **crossfade**.
   - Hold `Alt` to listen to the stream under the pointer.
+  - A player's own mute button and volume slider work too: Regie follows them. Unmuting another stream inside its player puts it on air.
 - **Ads.**
   - When the stream on air goes to an ad, the sound moves to another stream (the one with the busiest chat if Regie can tell) and comes back when the ad ends.
   - Ads stay silent.
+  - A Twitch player that goes to an ad is reloaded, on its own: a fresh player sometimes comes back without the ad. It is tried at most twice per stream every five minutes, so a stubborn ad can't loop. This can be turned off in the help sheet.
   - Twitch only runs an ad while its player is large and visible, after a click in the player. So a small stream in an ad is shown large, next to the main monitor, until the ad ends, and a notice asks for that one click.
   - On Twitch, ads are read from the player's own state messages. Elsewhere, Regie watches for a stream whose clock stops while it should be playing. You can also press `A`.
 - **Line check.** Twitch won't autoplay a player smaller than 400 × 300. A small Twitch monitor is shown large for a moment until it starts, then goes back to its place.

@@ -64,3 +64,15 @@ export function adTick(state: AdState, now: number, playing: boolean): AdState {
   }
   return state
 }
+
+export const RELOAD_LIMIT = 2
+export const RELOAD_WINDOW_MS = 5 * 60_000
+
+/**
+ * Whether to reload a player that just went to an ad. Reloading sometimes skips the ad, but Twitch often
+ * serves it again: at most two tries per stream within five minutes, so a stubborn ad never turns into a
+ * reload loop. `history` holds the times of the previous reloads.
+ */
+export function shouldReload(history: number[], now: number): boolean {
+  return history.filter((at) => now - at < RELOAD_WINDOW_MS).length < RELOAD_LIMIT
+}

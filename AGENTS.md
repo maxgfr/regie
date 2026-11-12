@@ -22,7 +22,6 @@ Static multi-stream viewer deployed on GitHub Pages. Read `PRODUCT.md` (product 
 - **Mount a player only once its tile has a real size** (`TileView` waits for a rect). A player started hidden or at 0×0 doesn't autoplay.
 - **Third-party calls must never break the room.** Wrap player calls with `safely()`, and have directory and title fetches return `null`/`[]` on failure.
 - **Anonymous only:** no account, OAuth app or API key. Twitch GQL uses the public web client id and is read-only.
-- Ads can't be blocked from a page. Don't add an ad-block bypass (private playlist tricks or proxies): it breaks Twitch's terms and sends viewers through third parties.
 - The URL hash is the session (`core/session.ts`). Keep encoding backward compatible.
 
 ## Code

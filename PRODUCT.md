@@ -38,7 +38,6 @@ A control room for viewers. It treats a multiview like a broadcast gallery: one 
   - TikTok: mute, seek.
   - Kick and Dailymotion: mute only, by reloading the iframe.
   - Vimeo: volume over postMessage.
-- **Ads cannot be blocked** from a page. Regie detects likely ad breaks (with heuristics, plus a manual key) and moves the sound away. Blocking needs a browser extension such as uBlock Origin.
 - TikTok LIVE cannot be embedded; it opens in its own window.
 - Interface in English (source) and French.
 

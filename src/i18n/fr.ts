@@ -121,7 +121,7 @@ export const fr: Record<MessageKey, string> = {
   'help.focusNote': 'Après un clic dans un player, Regie reprend le clavier pour que ces touches marchent toujours.',
   'help.ads': 'Pubs',
   'help.adsText':
-    'Une page web ne peut pas bloquer les pubs dans les players d’autres sites, et Twitch insère ses pubs dans la vidéo elle-même. Twitch ne décompte en plus une pub que si son player est grand et visible : Regie ne la cache donc jamais. Un petit stream en pub s’affiche en grand, sans le son, à côté de l’écran principal jusqu’à la fin de la pub, et le son passe sur un autre stream en attendant. Gardez l’onglet visible. Pour bloquer les pubs, installez une extension de navigateur comme uBlock Origin.',
+    'Une page web ne peut pas bloquer les pubs dans les players d’autres sites, et Twitch insère ses pubs dans la vidéo elle-même. Twitch lance en plus ses pubs en pause et ne les déroule qu’après un clic dans le player, tant qu’il est grand et visible : Regie ne cache donc jamais un stream en pub. Un petit stream s’affiche en grand et sans le son à côté de l’écran principal jusqu’à la fin de la pub, le son passe sur un autre stream en attendant, et un clic sur lecture dans ce player la lance. Gardez l’onglet visible. Pour bloquer les pubs, installez une extension de navigateur comme uBlock Origin.',
   'help.platforms': 'Ce que chaque plateforme permet',
   'help.platformsText':
     'Twitch : volume, avance dans les VOD, latence du direct. YouTube : volume et avance, direct compris. TikTok : son coupé ou non et avance, vidéos seulement (les lives TikTok s’ouvrent dans leur fenêtre). Kick et Dailymotion : son coupé seulement, en rechargeant le player. Vimeo : volume.',
@@ -190,7 +190,7 @@ export const fr: Record<MessageKey, string> = {
   'toast.noPip':
     'Ce navigateur ne sait pas ouvrir une page en picture-in-picture (Chrome et Edge sur ordinateur le peuvent).',
   'ad.notice':
-    '{name} est en pub : affiché en grand et sans le son jusqu’à la fin (Twitch ne décompte que les pubs visibles)',
+    '{name} est en pause ou en pub : cliquez sur lecture dans son player (Twitch attend un clic). Il reste en grand et sans le son jusqu’à la reprise',
   'help.background': 'En arrière-plan',
   'help.backgroundText':
     'Les streams continuent dans un onglet en arrière-plan ou une fenêtre réduite. Pour regarder en utilisant d’autres apps, ouvrez la mini-régie (P) : une fenêtre toujours au premier plan avec le stream à l’antenne. Sur téléphone, le système met en pause les players des autres sites quand le navigateur quitte l’écran : aucune page web ne peut l’empêcher.',
@@ -205,5 +205,8 @@ export const fr: Record<MessageKey, string> = {
     'Une notification système quand un favori passe en direct pendant que Regie est en arrière-plan.',
   'library.notifyOn': 'Notifications activées',
   'tile.badgeOffline': 'Hors ligne',
+  'help.adReload': 'Recharger un player qui passe en pub',
+  'help.adReloadHint':
+    'Un player Twitch rechargé revient parfois sans la pub. Deux essais par stream toutes les cinq minutes au plus, ensuite la pub passe.',
   'drop.hint': 'Lâchez le lien pour ajouter le stream',
 }

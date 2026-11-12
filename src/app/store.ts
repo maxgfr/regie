@@ -1,6 +1,6 @@
 import { TypedEventTarget } from 'remix/component'
 import { type ChatMessage, TwitchChat } from '../chat/irc.ts'
-import { type AdSignal, type AdState, adReducer, adTick, initialAdState } from '../core/ads.ts'
+import { type AdSignal, type AdState, adReducer, adTick, initialAdState, shouldReload } from '../core/ads.ts'
 import { mixAudio } from '../core/audio.ts'
 import {
   decayHype,
@@ -136,7 +136,15 @@ export class Store extends TypedEventTarget<Events> {
     if (typeof saved.audioMode === 'string' && modes.includes(saved.audioMode)) base.audioMode = saved.audioMode
     if (saved.transition === 'cut' || saved.transition === 'mix') base.transition = saved.transition
     if (typeof saved.duck === 'number' && saved.duck >= 0 && saved.duck <= 1) base.duck = saved.duck
-    for (const key of ['liveChat', 'antiSpoiler', 'autoDirector', 'adSwitch', 'chatOpen', 'autoAdd'] as const) {
+    for (const key of [
+      'liveChat',
+      'antiSpoiler',
+      'autoDirector',
+      'adSwitch',
+      'chatOpen',
+      'autoAdd',
+      'adReload',
+    ] as const) {
       if (typeof saved[key] === 'boolean') base[key] = saved[key]
     }
     if (Array.isArray(saved.keywords)) base.keywords = saved.keywords.filter((w) => typeof w === 'string').slice(0, 20)
@@ -223,6 +231,8 @@ export class Store extends TypedEventTarget<Events> {
 
   loadHash(hash: string) {
     for (const id of [...this.players.keys()]) this.#detach(id)
+    this.#containers.clear()
+    this.#reloads.clear()
     this.#warmQueue = []
     this.ui.warmup = null
     this.session = decodeSession(hash, this.#base())
@@ -290,9 +300,15 @@ export class Store extends TypedEventTarget<Events> {
   // ----- players -----
 
   /** Mounts the player of a tile into its screen element. Called once per tile by the stage. */
+  /** Where each player is mounted, to mount it again on a reload. */
+  #containers = new Map<string, HTMLElement>()
+  /** When each tile's player was reloaded for an ad. */
+  #reloads = new Map<string, number[]>()
+
   attach(id: string, container: HTMLElement) {
     const tile = this.tile(id)
     if (!tile || this.players.has(id)) return
+    this.#containers.set(id, container)
     const player = createPlayer({
       source: tile.source,
       container,
@@ -316,6 +332,7 @@ export class Store extends TypedEventTarget<Events> {
           const runtime = this.runtime.get(id)
           if (runtime) runtime.latency = seconds
         },
+        userVolume: (volume, muted) => this.#fromPlayer(id, volume, muted),
         adHint: (on) => {
           const runtime = this.runtime.get(id)
           // A player that opens on a pre-roll ad has started, even if "playing" only comes after the ad.
@@ -324,6 +341,7 @@ export class Store extends TypedEventTarget<Events> {
             if (this.ui.warmup?.id === id) setTimeout(() => this.#nextWarmup(id), 1200)
           }
           this.#adSignal(id, { type: 'hint', on })
+          if (on) this.#reloadForAd(id)
         },
       },
     })
@@ -389,6 +407,66 @@ export class Store extends TypedEventTarget<Events> {
     this.#emit('change')
   }
 
+  /**
+   * The viewer changed the sound inside a player. Regie follows instead of fighting it: muting there mutes the
+   * tile; turning up a silent tile puts it on air (solo) or unmutes it (blend, manual); a new level is kept.
+   */
+  #fromPlayer(id: string, volume: number, muted: boolean) {
+    const tile = this.tile(id)
+    if (!tile) return
+    const onAir = this.mix().onAir === id
+    if (muted) {
+      if (!onAir && this.session.audioMode === 'solo') return
+      tile.muted = true
+    } else {
+      tile.muted = false
+      if (volume > 0) tile.volume = Math.round(volume * 100) / 100
+      if (!onAir && this.session.audioMode === 'solo') {
+        this.session.audioId = id
+        this.ui.takeover = null
+      }
+    }
+    // The player already sounds the way the viewer wants: record it rather than send it back.
+    this.#applied.set(id, this.mix().volumes[id] ?? 0)
+    this.changed()
+  }
+
+  /**
+   * A Twitch player went to an ad: reload just that player (the rest of the wall keeps playing). A fresh
+   * player sometimes comes back without the ad; the tries are limited so a stubborn ad can't loop.
+   */
+  #reloadForAd(id: string) {
+    const tile = this.tile(id)
+    if (!this.session.adReload || tile?.source.platform !== 'twitch') return
+    const now = Date.now()
+    const history = (this.#reloads.get(id) ?? []).filter((at) => now - at < 10 * 60_000)
+    if (!shouldReload(history, now)) return
+    this.#reloads.set(id, [...history, now])
+    // Leave the ad a moment to settle, so the reload doesn't race the player's own ad request.
+    setTimeout(() => this.reloadPlayer(id), 1500)
+  }
+
+  /** Mounts a tile's player again, in place. */
+  reloadPlayer(id: string) {
+    const container = this.#containers.get(id)
+    const runtime = this.runtime.get(id)
+    if (!container || !runtime || !this.players.has(id)) return
+    this.#detach(id)
+    runtime.ad = initialAdState(Date.now())
+    runtime.played = false
+    runtime.retried = false
+    runtime.state = 'loading'
+    this.attach(id, container)
+    // A small monitor needs its line check again to start (Twitch only autoplays large players).
+    this.warmUp(id)
+    this.changed(false)
+  }
+
+  setAdReload(on: boolean) {
+    this.session.adReload = on
+    this.changed()
+  }
+
   /** Matches a player's stream quality to the size it is shown at (Twitch). */
   fitPlayer(id: string, displayHeight: number, large: boolean) {
     const player = this.players.get(id)
@@ -401,6 +479,11 @@ export class Store extends TypedEventTarget<Events> {
       const runtime = this.runtime.get(id)
       if (runtime && !runtime.played && runtime.state !== 'offline') safely(() => player.play())
     }
+  }
+
+  #forget(id: string) {
+    this.#containers.delete(id)
+    this.#reloads.delete(id)
   }
 
   #detach(id: string) {
@@ -436,6 +519,7 @@ export class Store extends TypedEventTarget<Events> {
 
   remove(id: string) {
     this.#detach(id)
+    this.#forget(id)
     this.#warmQueue = this.#warmQueue.filter((other) => other !== id)
     if (this.ui.warmup?.id === id) this.#nextWarmup(id)
     this.session.tiles = this.session.tiles.filter((tile) => tile.id !== id)
@@ -451,6 +535,8 @@ export class Store extends TypedEventTarget<Events> {
 
   clear() {
     for (const id of [...this.players.keys()]) this.#detach(id)
+    this.#containers.clear()
+    this.#reloads.clear()
     this.#warmQueue = []
     this.ui.warmup = null
     this.session = { ...this.#base(), master: this.session.master }
@@ -878,20 +964,8 @@ export class Store extends TypedEventTarget<Events> {
       adChanged = true
     }
     if (adChanged) this.changed(false)
-    // Every 5 s, send each player its level again: a click inside a player can change its sound.
-    if (++this.#ticks % 5 === 0 && this.ui.soundAllowed && !this.#fade) {
-      const target = this.ui.miniRegie ? {} : this.#targetVolumes()
-      for (const [id, player] of this.players) {
-        const tile = this.tile(id)
-        if (!tile || !capabilities(tile.source).volume) continue
-        safely(() => player.setVolume(target[id] ?? 0))
-        this.#applied.set(id, target[id] ?? 0)
-      }
-    }
     this.#emit('tick')
   }
-
-  #ticks = 0
 
   // ----- library -----
 

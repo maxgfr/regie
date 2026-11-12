@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { adReducer, adTick, initialAdState, STALL_MS } from './ads.ts'
+import { adReducer, adTick, initialAdState, RELOAD_WINDOW_MS, STALL_MS, shouldReload } from './ads.ts'
 import { mixAudio, standIn } from './audio.ts'
 import { decayHype, initialHype, recordMessage, spike } from './hype.ts'
 import { decodeSession, defaultSession, encodeSession, newTile } from './session.ts'
@@ -111,6 +111,13 @@ describe('ads', () => {
     state = adReducer(state, { type: 'paused', byUser: true }, 10)
     expect(state.inAd).toBe(true)
     expect(adReducer(state, { type: 'hint', on: false }, 20).inAd).toBe(false)
+  })
+
+  test('a player in an ad is reloaded at most twice in five minutes', () => {
+    expect(shouldReload([], 0)).toBe(true)
+    expect(shouldReload([1000], 2000)).toBe(true)
+    expect(shouldReload([1000, 2000], 3000)).toBe(false)
+    expect(shouldReload([1000, 2000], 2000 + RELOAD_WINDOW_MS)).toBe(true)
   })
 
   test('a manual mark holds until removed or timed out', () => {

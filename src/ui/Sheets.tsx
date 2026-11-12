@@ -3,7 +3,7 @@ import type { Handle } from 'remix/component'
 import { css, on } from 'remix/component'
 import type { Store } from '../app/store.ts'
 import { type Locale, locale, type MessageKey, setLocale, t } from '../i18n/index.ts'
-import { keyStyle } from './controls.tsx'
+import { keyStyle, switchStyle } from './controls.tsx'
 import { Icon } from './Icon.tsx'
 
 /** Side panels dock beside the wall, like the chat: nothing may cover a player (Twitch won't autoplay it). */
@@ -134,6 +134,17 @@ export function HelpSheet(handle: Handle<{ store: Store }>) {
       </dl>
       <p class="note">{t('help.focusNote')}</p>
       <h3>{t('help.ads')}</h3>
+      <label mix={switchStyle} style={{ marginBottom: '10px' }}>
+        <input
+          type="checkbox"
+          checked={store.session.adReload}
+          mix={on('change', (event) => store.setAdReload(event.currentTarget.checked))}
+        />
+        <span>
+          <strong>{t('help.adReload')}</strong>
+          <small>{t('help.adReloadHint')}</small>
+        </span>
+      </label>
       <p>{t('help.adsText')}</p>
       <h3>{t('help.background')}</h3>
       <p>{t('help.backgroundText')}</p>

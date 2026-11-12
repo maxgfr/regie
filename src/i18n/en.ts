@@ -117,7 +117,7 @@ export const en = {
   'help.focusNote': 'After a click inside a player, Regie takes the keyboard back so these keys keep working.',
   'help.ads': 'Ads',
   'help.adsText':
-    'A web page can’t block ads in other sites’ players, and Twitch puts its ads inside the video itself. Twitch also only counts an ad down while its player is large and visible, so Regie never hides it: a small stream in an ad is shown large, silent, next to the main monitor until the ad ends, and the sound moves to another stream meanwhile. Keep the tab visible. To block ads, install a browser extension such as uBlock Origin.',
+    'A web page can’t block ads in other sites’ players, and Twitch puts its ads inside the video itself. Twitch starts its ads paused and only runs them after a click in the player, while it is large and visible: Regie never hides a stream in an ad. A small one is shown large and silent next to the main monitor until the ad ends, the sound moves to another stream meanwhile, and one click on play in that player gets it going. Keep the tab visible. To block ads, install a browser extension such as uBlock Origin.',
   'help.platforms': 'What each platform allows',
   'help.platformsText':
     'Twitch: volume, VOD seek, live latency. YouTube: volume and seek, live included. TikTok: mute and seek, videos only (TikTok LIVE opens in its own window). Kick and Dailymotion: mute only, by reloading the player. Vimeo: volume.',
@@ -184,7 +184,7 @@ export const en = {
   'help.k.pip': 'Mini control room (always on top, keeps playing while you use other apps)',
   'toast.noPip': 'This browser can’t open a page in picture-in-picture (Chrome and Edge on a computer can).',
   'ad.notice':
-    '{name} is in an ad: click play in its player to run it (Twitch waits for a click). It stays large and silent until the ad ends',
+    '{name} is paused or in an ad: click play in its player (Twitch waits for a click). It stays large and silent until it plays',
   'help.background': 'In the background',
   'help.backgroundText':
     'Streams keep playing in a background tab or a minimised window. To watch while using other apps, open the mini control room (P): an always-on-top window with the stream on air. On phones, the system pauses other sites’ players when the browser leaves the screen: no web page can prevent that.',
@@ -197,6 +197,9 @@ export const en = {
   'library.notifyHint': 'A system notification when a favourite goes live while Regie is in the background.',
   'library.notifyOn': 'Notifications on',
   'tile.badgeOffline': 'Offline',
+  'help.adReload': 'Reload a player that goes to an ad',
+  'help.adReloadHint':
+    'A fresh Twitch player sometimes comes back without the ad. Two tries per stream every five minutes at most, then the ad plays.',
   'drop.hint': 'Drop the link to add the stream',
 } as const
 

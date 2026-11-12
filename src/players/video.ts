@@ -41,11 +41,23 @@ export function createVideoPlayer(context: PlayerContext): Player {
   video.addEventListener('ended', () => events.state('ended', true))
   video.addEventListener('error', () => events.state('offline', true))
   video.addEventListener('timeupdate', () => events.progress(video.currentTime))
+  let ours = false
+  video.addEventListener('volumechange', () => {
+    if (ours) {
+      ours = false
+      return
+    }
+    events.userVolume(video.volume, video.muted)
+  })
 
   return {
     setVolume(volume) {
-      video.muted = volume <= 0
-      if (volume > 0) video.volume = Math.min(1, volume)
+      const muted = volume <= 0
+      const level = muted ? video.volume : Math.min(1, volume)
+      if (muted === video.muted && level === video.volume) return
+      ours = true
+      video.muted = muted
+      video.volume = level
     },
     play() {
       video.play().catch(() => undefined)

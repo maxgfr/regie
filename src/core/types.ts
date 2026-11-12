@@ -47,6 +47,8 @@ export interface Session {
   adSwitch: boolean
   /** Favourites that go live are added to the wall on their own. */
   autoAdd: boolean
+  /** Reload a Twitch player that goes to an ad, which sometimes skips it (limited tries). */
+  adReload: boolean
 }
 
 export interface Rect {

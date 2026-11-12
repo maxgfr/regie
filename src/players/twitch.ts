@@ -60,8 +60,12 @@ export function createTwitchPlayer(context: PlayerContext): Player {
   let playing = false
   let adStreak = 0
   const expectMuted = () => wanted <= 0 || !playing || inAd
+  // When Regie last changed the sound, or the player changed state: differences right after are the player's
+  // own doing (it restores its state around ads and starts), not the viewer's.
+  let settledAt = 0
   const apply = () => {
     if (!player || !ready) return
+    settledAt = Date.now()
     player.setMuted(expectMuted())
     if (wanted > 0) player.setVolume(wanted)
   }
@@ -103,8 +107,20 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       events.adHint(ad)
       apply()
     }
-    // Twitch restores its own mute state after an ad or a click in the player: put Regie's mix back.
-    if (ready && update.muted !== undefined && update.muted !== expectMuted()) apply()
+    if (!ready || update.muted === undefined) return
+    const differs =
+      update.muted !== expectMuted() ||
+      (!update.muted && update.volume !== undefined && Math.abs(update.volume - wanted) > 0.02)
+    if (!differs) return
+    if (inAd || !playing || Date.now() - settledAt < 3000) {
+      // Twitch put its own state back (after an ad or a start): Regie's mix wins.
+      apply()
+    } else {
+      // The viewer used the player's own mute button or slider: that becomes Regie's setting.
+      wanted = update.muted ? 0 : (update.volume ?? wanted)
+      settledAt = Date.now()
+      events.userVolume(update.volume ?? wanted, update.muted)
+    }
   }
   window.addEventListener('message', onMessage)
 
@@ -199,6 +215,7 @@ interface TwitchUpdate {
   fps: number
   latency?: number
   muted?: boolean
+  volume?: number
 }
 
 /** Reads the `UPDATE_STATE` message the Twitch player iframe posts to its host page. */
@@ -206,7 +223,7 @@ export function readUpdate(data: unknown): TwitchUpdate | null {
   if (!data || typeof data !== 'object') return null
   const message = data as { eventName?: unknown; params?: Record<string, unknown> }
   if (message.eventName !== 'UPDATE_STATE' || !message.params) return null
-  const { playback, stats, muted } = message.params
+  const { playback, stats, muted, volume } = message.params
   if (typeof playback !== 'string') return null
   const video = (stats as { videoStats?: { fps?: unknown; hlsLatencyBroadcaster?: unknown } } | undefined)?.videoStats
   return {
@@ -214,5 +231,6 @@ export function readUpdate(data: unknown): TwitchUpdate | null {
     fps: typeof video?.fps === 'number' ? video.fps : 0,
     latency: typeof video?.hlsLatencyBroadcaster === 'number' ? video.hlsLatencyBroadcaster : undefined,
     muted: typeof muted === 'boolean' ? muted : undefined,
+    volume: typeof volume === 'number' ? volume : undefined,
   }
 }

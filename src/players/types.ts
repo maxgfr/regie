@@ -10,6 +10,8 @@ export interface PlayerEvents {
   latency(seconds: number): void
   /** A platform message that suggests an ad started or ended. */
   adHint(on: boolean): void
+  /** The viewer changed the sound inside the player itself (its mute button or volume slider). */
+  userVolume(volume: number, muted: boolean): void
 }
 
 export interface Player {

@@ -42,6 +42,7 @@ export function defaultSession(): Session {
     autoDirector: false,
     adSwitch: true,
     autoAdd: false,
+    adReload: true,
   }
 }
 
@@ -106,6 +107,7 @@ export function encodeSession(session: Session): string {
   if (session.autoDirector) params.set('ad', '1')
   if (!session.adSwitch) params.set('as', '0')
   if (session.autoAdd) params.set('aa', '1')
+  if (!session.adReload) params.set('ar', '0')
   return params.toString()
 }
 
@@ -153,6 +155,7 @@ export function decodeSession(hash: string, base: Session = defaultSession()): S
   session.autoDirector = flag('ad', '1', base.autoDirector)
   session.adSwitch = flag('as', '1', base.adSwitch)
   session.autoAdd = flag('aa', '1', base.autoAdd)
+  session.adReload = flag('ar', '1', base.adReload)
   const transition = params.get('x')
   if (transition === 'mix' || transition === 'cut') session.transition = transition
   if (params.has('k')) {

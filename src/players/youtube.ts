@@ -11,6 +11,8 @@ interface YTPlayer {
   seekTo(seconds: number, allowSeekAhead: boolean): void
   getCurrentTime(): number
   getPlayerState(): number
+  isMuted(): boolean
+  getVolume(): number
   destroy(): void
 }
 
@@ -41,8 +43,11 @@ export function createYouTubePlayer(context: PlayerContext): Player {
   )
   container.append(iframe)
 
+  let settledAt = 0
+  let playing = false
   const apply = () => {
     if (!player || !ready) return
+    settledAt = Date.now()
     if (wanted <= 0) player.mute()
     else {
       player.unMute()
@@ -75,7 +80,10 @@ export function createYouTubePlayer(context: PlayerContext): Player {
             const state = map[event.data]
             if (!state) return
             // The player starts muted; the sound comes on once it plays.
-            if (state === 'playing') apply()
+            if (state === 'playing' && !playing) {
+              playing = true
+              apply()
+            }
             events.state(state, !(state === 'paused' && ourPause))
             if (state === 'paused') ourPause = false
           },
@@ -86,6 +94,17 @@ export function createYouTubePlayer(context: PlayerContext): Player {
         if (!ready || !player) return
         try {
           if (player.getPlayerState() === 1) events.progress(player.getCurrentTime())
+          // The viewer used the player's own mute button or slider: that becomes Regie's setting.
+          if (playing && Date.now() - settledAt > 3000) {
+            const muted = player.isMuted()
+            const volume = player.getVolume() / 100
+            const differs = muted !== wanted <= 0 || (!muted && Math.abs(volume - wanted) > 0.02)
+            if (differs) {
+              wanted = muted ? 0 : volume
+              settledAt = Date.now()
+              events.userVolume(volume, muted)
+            }
+          }
         } catch {
           // Ignored: the API is not ready yet.
         }

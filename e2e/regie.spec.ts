@@ -140,3 +140,27 @@ test('a monitor in full screen fills the display, picture included', async ({ pa
     )
     .toBeLessThan(1440)
 })
+
+test('muting or unmuting inside a player is followed, not overridden', async ({ page }) => {
+  await page.goto('/#s=v.https://example.com/a.mp4|v.https://example.com/b.mp4')
+  await expect(page.locator('[data-tile] video')).toHaveCount(2)
+  const first = page.locator('[data-tile]').first()
+  const second = page.locator('[data-tile]').nth(1)
+  await expect(first).toHaveAttribute('data-tally', 'pgm')
+  // The viewer turns on the second player's sound from its own controls: it goes on air.
+  await page.evaluate(() => {
+    const video = document.querySelectorAll('[data-tile] video')[1] as HTMLVideoElement
+    video.muted = false
+    video.volume = 0.6
+  })
+  await expect(second).toHaveAttribute('data-tally', 'pgm')
+  // Then mutes it from the player: Regie keeps it muted instead of turning it back on.
+  await page.evaluate(() => {
+    ;(document.querySelectorAll('[data-tile] video')[1] as HTMLVideoElement).muted = true
+  })
+  await expect(second.getByRole('button', { name: 'Unmute' })).toHaveAttribute('aria-pressed', 'true')
+  await page.waitForTimeout(1500)
+  expect(await page.evaluate(() => (document.querySelectorAll('[data-tile] video')[1] as HTMLVideoElement).muted)).toBe(
+    true,
+  )
+})
