@@ -50,6 +50,9 @@ export const en = {
   'tile.badgeStart': 'Click to start',
   'tile.startHint':
     'The platform waits for a click inside this player (autoplay refused, or a mature-content warning to confirm).',
+  'tile.badgeAdblock': 'Ad blocker?',
+  'tile.adblockHint':
+    'This player never started. If you use an ad blocker, Twitch refuses to play with it: disable it for this site. Otherwise click play inside the player (autoplay refused or mature-content warning).',
   'tile.delay': 'Delay {s}',
   'tile.ahead': 'Ahead {s}',
   'tile.latency': 'Latency {s}',
@@ -117,7 +120,7 @@ export const en = {
   'help.focusNote': 'After a click inside a player, Regie takes the keyboard back so these keys keep working.',
   'help.ads': 'Ads',
   'help.adsText':
-    'A web page can’t block ads in other sites’ players, and Twitch puts its ads inside the video itself. Twitch starts its ads paused and only runs them after a click in the player, while it is large and visible: Regie never hides a stream in an ad. A small one is shown large and silent next to the main monitor until the ad ends, the sound moves to another stream meanwhile, and one click on play in that player gets it going. Keep the tab visible. To block ads, install a browser extension such as uBlock Origin.',
+    'A web page can’t block ads inside other sites’ players: each player is a cross-origin iframe (player.twitch.tv…), this page’s code never runs inside it, and Twitch stitches its ads into the video itself — there is nothing for the page to remove. Twitch also detects ad blockers and then refuses to play: if your own blocker is on and a stream never starts, its monitor shows “Ad blocker?” — disable the extension for this site. What Regie does instead: it detects ads, moves the sound to another stream, and shows a small one large and silent next to the main monitor until the ad ends (Twitch only counts an ad down on a large, visible player, so a stream in an ad is never hidden or covered). Twitch starts its ads paused and only runs them after a click in the player: one click on play gets it going. Keep the tab visible. Regie can also reload a player once or twice to try to skip an ad. To block ads elsewhere in your browser, an extension such as uBlock Origin is the only effective tool — but expect Twitch to notice it. The only officially ad-free option on Twitch itself is a Turbo subscription.',
   'help.platforms': 'What each platform allows',
   'help.platformsText':
     'Twitch: volume, VOD seek, live latency. YouTube: volume and seek, live included. TikTok: mute and seek, videos only (TikTok LIVE opens in its own window). Kick and Dailymotion: mute only, by reloading the player. Vimeo: volume.',
@@ -185,6 +188,8 @@ export const en = {
   'toast.noPip': 'This browser can’t open a page in picture-in-picture (Chrome and Edge on a computer can).',
   'ad.notice':
     '{name} is paused or in an ad: click play in its player (Twitch waits for a click). It stays large and silent until it plays',
+  'ad.blockedNotice':
+    '{name} won’t start: an ad blocker is probably on. Twitch detects blockers and refuses to play with them — disable the extension for this site, or click play in the player',
   'help.background': 'In the background',
   'help.backgroundText':
     'Streams keep playing in a background tab or a minimised window. To watch while using other apps, open the mini control room (P): an always-on-top window with the stream on air. On phones, the system pauses other sites’ players when the browser leaves the screen: no web page can prevent that.',

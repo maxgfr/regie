@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'bun:test'
-import { adReducer, adTick, initialAdState, RELOAD_WINDOW_MS, STALL_MS, shouldReload } from './ads.ts'
+import {
+  adblockSuspect,
+  adReducer,
+  adTick,
+  BLOCKED_AFTER_MS,
+  initialAdState,
+  RELOAD_WINDOW_MS,
+  STALL_MS,
+  shouldReload,
+} from './ads.ts'
 import { mixAudio, standIn } from './audio.ts'
 import { decayHype, initialHype, recordMessage, spike } from './hype.ts'
 import { decodeSession, defaultSession, encodeSession, newTile } from './session.ts'
@@ -125,6 +134,16 @@ describe('ads', () => {
     state = adReducer(state, { type: 'progress', time: 5 }, 100)
     expect(state.inAd).toBe(true)
     expect(adTick(state, 200_000, true).inAd).toBe(false)
+  })
+
+  test('a player that was asked to play and still never started is suspected of being ad-blocked', () => {
+    expect(adblockSuspect({ mountedAt: 0, retried: true }, BLOCKED_AFTER_MS + 1)).toBe(true)
+    // Not yet: no play() retry sent, or still playing, or offline, or too soon.
+    expect(adblockSuspect({ mountedAt: 0, retried: false }, BLOCKED_AFTER_MS + 1)).toBe(false)
+    expect(adblockSuspect({ mountedAt: 0, played: true, retried: true }, BLOCKED_AFTER_MS + 1)).toBe(false)
+    expect(adblockSuspect({ mountedAt: 0, retried: true, offline: true }, BLOCKED_AFTER_MS + 1)).toBe(false)
+    expect(adblockSuspect({ mountedAt: 0, retried: true }, BLOCKED_AFTER_MS)).toBe(false)
+    expect(adblockSuspect({}, BLOCKED_AFTER_MS + 1)).toBe(false)
   })
 })
 

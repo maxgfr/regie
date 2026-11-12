@@ -68,6 +68,23 @@ export function adTick(state: AdState, now: number, playing: boolean): AdState {
 export const RELOAD_LIMIT = 2
 export const RELOAD_WINDOW_MS = 5 * 60_000
 
+export const BLOCKED_AFTER_MS = 12_000
+
+/**
+ * A Twitch player that Regie already asked to play again and that still never started is usually refusing
+ * because of the viewer's own ad blocker: Twitch detects blockers and shows an error instead of the
+ * stream. The player iframe is cross-origin, so Regie cannot read that error screen — this is a timing
+ * heuristic (mounted, retried, still not played, not offline), not a certainty. `retried` means a `play()`
+ * was already sent to a player that didn't start on its own.
+ */
+export function adblockSuspect(
+  input: { mountedAt?: number; played?: boolean; retried?: boolean; offline?: boolean },
+  now: number,
+): boolean {
+  if (input.mountedAt === undefined || input.played || !input.retried || input.offline) return false
+  return now - input.mountedAt > BLOCKED_AFTER_MS
+}
+
 /**
  * Whether to reload a player that just went to an ad. Reloading sometimes skips the ad, but Twitch often
  * serves it again: at most two tries per stream within five minutes, so a stubborn ad never turns into a

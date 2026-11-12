@@ -83,6 +83,78 @@ test('an ad marked with A hands the sound to another stream', async ({ page }) =
   await expect(page.locator('[data-tile]').first()).toHaveAttribute('data-tally', 'pgm')
 })
 
+/** A fake official Twitch embed: the real player.twitch.tv script is replaced by a stub that records instances. */
+const FAKE_TWITCH = `window.__players = []
+window.Twitch = { Player: class {
+  static READY='ready'; static PLAY='play'; static PLAYING='playing'; static PAUSE='pause'
+  static ENDED='ended'; static ONLINE='online'; static OFFLINE='offline'; static PLAYBACK_BLOCKED='playback_blocked'
+  constructor(element) {
+    this.listeners = {}
+    const frame = document.createElement('iframe')
+    frame.src = 'about:blank'
+    element.append(frame)
+    this.iframe = frame
+    window.__players.push(this)
+  }
+  addEventListener(event, cb) { (this.listeners[event] ??= []).push(cb) }
+  emit(event) { for (const cb of this.listeners[event] ?? []) cb() }
+  setVolume() {} setMuted() {} play() {} pause() {} seek() {}
+  getCurrentTime() { return 0 } isPaused() { return false }
+  getPlaybackStats() { return {} } getQualities() { return [] } setQuality() {}
+} }`
+
+type FakePlayer = { emit(event: string): void; iframe: HTMLIFrameElement }
+
+/** Sends the UPDATE_STATE message the real Twitch iframe posts to its host page. */
+function twitchUpdate(page: Page, index: number, params: Record<string, unknown>) {
+  return page.evaluate(
+    ([i, p]) => {
+      const player = (window as unknown as { __players: FakePlayer[] }).__players[i as number] as FakePlayer
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { eventName: 'UPDATE_STATE', params: p },
+          origin: 'https://player.twitch.tv',
+          source: player.iframe.contentWindow,
+        }),
+      )
+    },
+    [index, params] as const,
+  )
+}
+
+test('a Twitch player that reports an ad gets the badge, the sound moves, and one reload', async ({ page }) => {
+  await page.route('https://player.twitch.tv/js/embed/v1.js', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE_TWITCH }),
+  )
+  await page.goto('/#s=tw.alpha|tw.beta&l=focus')
+  await expect(page.locator('[data-tile]')).toHaveCount(2)
+  await page.waitForFunction(() => (window as unknown as { __players?: unknown[] }).__players?.length === 2)
+  await page.evaluate(() => {
+    for (const player of (window as unknown as { __players: FakePlayer[] }).__players) {
+      player.emit('ready')
+      player.emit('playing')
+    }
+  })
+  // Two UPDATE_STATE messages with playback Idle but frames flowing: the only ad signal an embed gets.
+  const ad = { playback: 'Idle', stats: { videoStats: { fps: 30 } }, muted: true }
+  await twitchUpdate(page, 0, ad)
+  await twitchUpdate(page, 0, ad)
+  await expect(page.locator('[data-tile]').first()).toHaveAttribute('data-ad', 'true')
+  await expect(page.locator('[data-tile]').nth(1)).toHaveAttribute('data-tally', 'pgm')
+  // adReload is on by default: the player is reloaded once, after the ad settles.
+  await page.waitForFunction(() => (window as unknown as { __players?: unknown[] }).__players?.length === 3, null, {
+    timeout: 6000,
+  })
+  // The fresh player reports Playing: the ad is over.
+  await page.evaluate(() => {
+    const player = (window as unknown as { __players: FakePlayer[] }).__players[2] as FakePlayer
+    player.emit('ready')
+    player.emit('playing')
+  })
+  await twitchUpdate(page, 2, { playback: 'Playing', stats: { videoStats: { fps: 60 } }, muted: false, volume: 1 })
+  await expect(page.locator('[data-tile]').first()).toHaveAttribute('data-ad', 'false')
+})
+
 test('sync mode marks streams from the label strip', async ({ page }) => {
   await page.goto('/#s=kk.one|kk.two')
   await page.locator('#stage').click({ position: { x: 2, y: 2 } })

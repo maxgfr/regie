@@ -183,7 +183,7 @@ const umdStyle = css({
   '& .tag[data-kind="ad"]': { background: 'var(--amber)', color: '#1a1000' },
   '& .tag[data-kind="hype"]': { background: 'var(--text)', color: '#000' },
   '& .tag[data-kind="offline"]': { background: 'var(--key)', color: 'var(--dim)' },
-  '& .tag[data-kind="start"]': {
+  '& .tag[data-kind="start"], & .tag[data-kind="adblock"]': {
     background: 'transparent',
     color: 'var(--amber)',
     boxShadow: 'inset 0 0 0 1px var(--amber)',
@@ -303,11 +303,15 @@ interface TileProps {
 function TileView(handle: Handle<TileProps>) {
   const { store, id } = handle.props
   let waiting = false
+  let blocked = false
   store.addEventListener(
     'tick',
     () => {
-      if (store.waitingForClick(id) !== waiting) {
-        waiting = !waiting
+      const nextWaiting = store.waitingForClick(id)
+      const nextBlocked = store.adblocked(id)
+      if (nextWaiting !== waiting || nextBlocked !== blocked) {
+        waiting = nextWaiting
+        blocked = nextBlocked
         handle.update()
       }
     },
@@ -510,10 +514,16 @@ function TileView(handle: Handle<TileProps>) {
                 {t('tile.badgeOffline')}
               </span>
             )}
-            {store.waitingForClick(id) && (
-              <span class="tag" data-kind="start" title={t('tile.startHint')}>
-                {t('tile.badgeStart')}
+            {store.adblocked(id) ? (
+              <span class="tag" data-kind="adblock" title={t('tile.adblockHint')}>
+                {t('tile.badgeAdblock')}
               </span>
+            ) : (
+              store.waitingForClick(id) && (
+                <span class="tag" data-kind="start" title={t('tile.startHint')}>
+                  {t('tile.badgeStart')}
+                </span>
+              )
             )}
             {takeover && (
               <span class="tag" data-kind="hype">

@@ -1,6 +1,15 @@
 import { TypedEventTarget } from 'remix/component'
 import { type ChatMessage, TwitchChat } from '../chat/irc.ts'
-import { type AdSignal, type AdState, adReducer, adTick, initialAdState, shouldReload } from '../core/ads.ts'
+import {
+  type AdSignal,
+  type AdState,
+  adblockSuspect,
+  adReducer,
+  adTick,
+  initialAdState,
+  RELOAD_WINDOW_MS,
+  shouldReload,
+} from '../core/ads.ts'
 import { mixAudio } from '../core/audio.ts'
 import {
   decayHype,
@@ -233,6 +242,7 @@ export class Store extends TypedEventTarget<Events> {
     for (const id of [...this.players.keys()]) this.#detach(id)
     this.#containers.clear()
     this.#reloads.clear()
+    this.#blocked.clear()
     this.#warmQueue = []
     this.ui.warmup = null
     this.session = decodeSession(hash, this.#base())
@@ -304,6 +314,8 @@ export class Store extends TypedEventTarget<Events> {
   #containers = new Map<string, HTMLElement>()
   /** When each tile's player was reloaded for an ad. */
   #reloads = new Map<string, number[]>()
+  /** Tiles currently suspected of being blocked by the viewer's ad blocker (to re-render on change). */
+  #blocked = new Set<string>()
 
   attach(id: string, container: HTMLElement) {
     const tile = this.tile(id)
@@ -439,7 +451,7 @@ export class Store extends TypedEventTarget<Events> {
     const tile = this.tile(id)
     if (!this.session.adReload || tile?.source.platform !== 'twitch') return
     const now = Date.now()
-    const history = (this.#reloads.get(id) ?? []).filter((at) => now - at < 10 * 60_000)
+    const history = (this.#reloads.get(id) ?? []).filter((at) => now - at < RELOAD_WINDOW_MS)
     if (!shouldReload(history, now)) return
     this.#reloads.set(id, [...history, now])
     // Leave the ad a moment to settle, so the reload doesn't race the player's own ad request.
@@ -537,6 +549,7 @@ export class Store extends TypedEventTarget<Events> {
     for (const id of [...this.players.keys()]) this.#detach(id)
     this.#containers.clear()
     this.#reloads.clear()
+    this.#blocked.clear()
     this.#warmQueue = []
     this.ui.warmup = null
     this.session = { ...this.#base(), master: this.session.master }
@@ -928,6 +941,33 @@ export class Store extends TypedEventTarget<Events> {
     return Date.now() - runtime.mountedAt > 8000
   }
 
+  /**
+   * A Twitch player that never started although Regie already sent it a `play()`: almost always the
+   * viewer's own ad blocker, which Twitch detects and refuses to run with. The iframe is cross-origin,
+   * so the player's error screen can't be read — this is the timing heuristic from `core/ads.ts`.
+   */
+  adblocked(id: string): boolean {
+    const tile = this.tile(id)
+    const runtime = this.runtime.get(id)
+    if (!tile || !runtime || tile.source.platform !== 'twitch') return false
+    return adblockSuspect(
+      {
+        mountedAt: runtime.mountedAt,
+        played: runtime.played,
+        retried: runtime.retried,
+        offline: runtime.state === 'offline',
+      },
+      Date.now(),
+    )
+  }
+
+  /** Twitch tiles that look blocked by the viewer's ad blocker, for the notice under the wall. */
+  adblockedTiles(): string[] {
+    return this.session.tiles
+      .filter((tile) => tile.source.platform === 'twitch' && this.adblocked(tile.id))
+      .map((tile) => tile.id)
+  }
+
   meter(id: string): number {
     const runtime = this.runtime.get(id)
     return runtime ? meter(runtime.hype, Date.now()) : 0
@@ -956,6 +996,12 @@ export class Store extends TypedEventTarget<Events> {
       runtime.retried = true
       const player = this.players.get(id)
       if (player) safely(() => player.play())
+    }
+    // A player that stays unstarted after that retry is probably blocked by the viewer's ad blocker.
+    const blocked = new Set(this.adblockedTiles())
+    if (blocked.size !== this.#blocked.size || [...blocked].some((id) => !this.#blocked.has(id))) {
+      this.#blocked = blocked
+      adChanged = true
     }
     // A monitor that doesn't start within 7 s (a mature-content warning waits for a click) gives way.
     if (this.ui.warmup && now - this.ui.warmup.since > 7000) this.#nextWarmup(this.ui.warmup.id)
