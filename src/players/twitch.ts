@@ -52,11 +52,14 @@ export const TWITCH_MIN_HEIGHT = 300
 
 /**
  * Ads, as the player's state messages show them (observed, undocumented):
- * - `Buffering` while the buffer holds many seconds: the stream waits behind an ad. A real stall has an
- *   empty buffer. Held for `AD_SIGNAL_MS`.
+ * - `Playing` with no broadcaster latency: an ad plays (a live stream always reports how far behind the
+ *   broadcaster it is; an ad has no broadcaster). Held for `AD_RUNNING_MS`, live streams only.
+ * - `Buffering` while the buffer holds many seconds: the stream waits behind an ad that doesn't move. A real
+ *   stall has an empty buffer. Held for `AD_SIGNAL_MS`.
  * - `Idle` while frames keep coming. A paused live player looks the same for about seven seconds, so this
  *   one only counts after `AD_IDLE_MS`, and never after a pause Regie sent.
  */
+export const AD_RUNNING_MS = 4000
 export const AD_SIGNAL_MS = 3000
 export const AD_IDLE_MS = 10_000
 export const AD_MIN_BUFFER_S = 10
@@ -67,6 +70,12 @@ const STALL_BUFFER_S = 0.5
 const SWITCH_SETTLE_MS = 6000
 /** Wait for the layout to settle before matching the quality to it (a line check or an ad boost is brief). */
 const FIT_DELAY_MS = 1500
+/**
+ * The quality is only changed once the stream itself has played this long. A `setQuality` while an ad starts
+ * freezes the ad (and the stream behind it) until someone clicks the player: observed with Twitch's
+ * "preparing your stream" pre-roll, which starts a few seconds after the player.
+ */
+const CONTENT_SETTLE_MS = 5000
 
 /** Official Embed JS: volume, mute, VOD seek, quality and the live latency in its playback stats. */
 export function createTwitchPlayer(context: PlayerContext): Player {
@@ -88,6 +97,9 @@ export function createTwitchPlayer(context: PlayerContext): Player {
   let adSince = 0
   let pausedByRegie = false
   let lastPlayback = ''
+  const live = source.kind !== 'vod'
+  // Since when the stream itself (not an ad) has been playing without a break.
+  let contentSince: number | null = null
   // Autoplay with sound can be refused (PLAYBACK_BLOCKED): the player starts muted, and the sound only comes
   // on once it really plays. Ads are always silent here: another stream carries the sound meanwhile.
   let playing = false
@@ -109,14 +121,18 @@ export function createTwitchPlayer(context: PlayerContext): Player {
   let quality = 'auto'
   let switchedAt = 0
   let stalls = initialStalls(Date.now())
+  let qualityDirty = false
   const applyQuality = () => {
-    if (!player || !ready || !playing || inAd || !fitting) return
+    qualityDirty = true
+    if (!player || !ready || inAd || !fitting) return
+    if (contentSince === null || Date.now() - contentSince < CONTENT_SETTLE_MS) return
     try {
       const available = player
         .getQualities()
         .map((q) => parseTwitchQuality(q.group ?? ''))
         .filter((q): q is Quality => q !== null)
       if (!available.length) return
+      qualityDirty = false
       // Device pixels count, but only up to 1.25×: on a Retina wall a small monitor at 360p looks the
       // same and costs a third of 720p.
       const density = Math.min(window.devicePixelRatio || 1, 1.25)
@@ -147,20 +163,25 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       }
     }
     lastPlayback = update.playback
-    let signature = adSignature(update)
+    const content = update.playback === 'Playing' && (!live || update.latency === undefined || update.latency > 0)
+    contentSince = content ? (contentSince ?? now) : null
+    let signature = adSignature(update, live)
     if (signature === 'idle' && pausedByRegie) signature = null
     if (signature !== adKind) {
       adKind = signature
       adSince = now
     }
-    const held = adKind !== null && now - adSince >= (adKind === 'idle' ? AD_IDLE_MS : AD_SIGNAL_MS)
-    const ad = held ? true : update.playback === 'Playing' ? false : inAd
+    const hold = adKind === 'idle' ? AD_IDLE_MS : adKind === 'running' ? AD_RUNNING_MS : AD_SIGNAL_MS
+    const held = adKind !== null && now - adSince >= hold
+    const ad = held ? true : content ? false : inAd
     if (ad !== inAd) {
       inAd = ad
       if (!ad) playing = true
       events.adHint(ad)
       apply()
     }
+    // A size change waited for the stream itself to play steadily.
+    if (qualityDirty && contentSince !== null && now - contentSince >= CONTENT_SETTLE_MS) applyQuality()
     if (!ready || update.muted === undefined) return
     const differs =
       update.muted !== expectMuted() ||
@@ -204,8 +225,7 @@ export function createTwitchPlayer(context: PlayerContext): Player {
         playing = true
         pausedByRegie = false
         if (first) apply()
-        // Only does something if the qualities weren't known yet, or the monitor changed size meanwhile.
-        applyQuality()
+        // The quality waits for the stream itself: this "playing" may well be the start of a pre-roll.
         events.state('playing', true)
       })
       instance.addEventListener(Twitch.Player.PLAYBACK_BLOCKED, () => {
@@ -281,11 +301,12 @@ interface TwitchUpdate {
   volume?: number
 }
 
-type AdSignature = 'buffering' | 'idle' | null
+type AdSignature = 'running' | 'buffering' | 'idle' | null
 
-/** Which ad signature a state message shows, if any (see `AD_SIGNAL_MS` and `AD_IDLE_MS`). */
-export function adSignature(update: TwitchUpdate | null): AdSignature {
+/** Which ad signature a state message shows, if any (see `AD_RUNNING_MS`, `AD_SIGNAL_MS`, `AD_IDLE_MS`). */
+export function adSignature(update: TwitchUpdate | null, live = true): AdSignature {
   if (!update) return null
+  if (live && update.playback === 'Playing' && update.latency === 0 && update.fps > 0) return 'running'
   if (update.playback === 'Buffering' && (update.buffer ?? 0) >= AD_MIN_BUFFER_S) return 'buffering'
   if (update.playback === 'Idle' && update.fps >= AD_MIN_FPS) return 'idle'
   return null

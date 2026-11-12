@@ -1,8 +1,12 @@
 import type { AudioMode, LayoutMode, Session, Source, Tile } from './types.ts'
 
 /**
- * The whole setup lives in the URL hash, so a multiview is shared by copying the address:
- * `#s=tw.shroud,yt.dQw4w9WgXcQ,kk.xqc&l=focus&f=0&a=1&m=solo`.
+ * The whole setup lives in the URL hash, so a multiview is shared by copying the address, and easy to write
+ * by hand: `#shroud+xqc` (Twitch channels), `#shroud+yt.dQw4w9WgXcQ+kk.xqc&l=focus&a=1`.
+ *
+ * - Sources are separated by `+` (older links used `|`, still read). The `s=` key is optional when the
+ *   sources come first.
+ * - A bare name is a live Twitch channel; anything else is `<code>.<id>` (see `CODES`).
  */
 
 const CODES: [string, Source['platform'], Source['kind']][] = [
@@ -46,12 +50,17 @@ export function defaultSession(): Session {
   }
 }
 
+/** Twitch logins: letters, digits and underscores, never a dot (so they can't be read as a code). */
+const TWITCH_LOGIN = /^[A-Za-z0-9_]{2,25}$/
+
 export function encodeSource(source: Source): string {
+  if (source.platform === 'twitch' && source.kind === 'live' && TWITCH_LOGIN.test(source.id)) return source.id
   const code = CODES.find(([, platform, kind]) => platform === source.platform && kind === source.kind)?.[0] ?? 'w'
   return `${code}.${source.id}${source.start ? `@${Math.floor(source.start)}` : ''}`
 }
 
 export function decodeSource(text: string): Source | null {
+  if (TWITCH_LOGIN.test(text)) return { platform: 'twitch', kind: 'live', id: text }
   const dot = text.indexOf('.')
   if (dot < 1) return null
   const code = text.slice(0, dot)
@@ -91,7 +100,8 @@ const round = (value: number) => Math.round(value * 100) / 100
 
 export function encodeSession(session: Session): string {
   const params = new URLSearchParams()
-  if (session.tiles.length) params.set('s', session.tiles.map(encodeTile).join('|'))
+  // Joined with spaces, which the address writes as `+`.
+  if (session.tiles.length) params.set('s', session.tiles.map(encodeTile).join(' '))
   const index = (id: string | null) => session.tiles.findIndex((tile) => tile.id === id)
   if (session.layout !== 'grid') params.set('l', session.layout)
   if (index(session.focusId) > 0) params.set('f', String(index(session.focusId)))
@@ -124,8 +134,16 @@ export function newTile(source: Source): Tile {
 /** Reads a session from the URL hash. Settings the link doesn't carry come from `base` (saved preferences). */
 export function decodeSession(hash: string, base: Session = defaultSession()): Session {
   const session: Session = { ...base, tiles: [], keywords: [...base.keywords] }
-  const params = new URLSearchParams(hash.replace(/^#/, ''))
-  for (const part of (params.get('s') ?? '').split('|').filter(Boolean).slice(0, 16)) {
+  let query = hash.replace(/^#/, '')
+  // `#shroud+xqc&l=focus`: sources first, without `s=`.
+  const first = query.split('&')[0] ?? ''
+  if (first && !first.includes('=')) query = `s=${query}`
+  const params = new URLSearchParams(query)
+  // `+` reads as a space; `|` is the separator of older links. An encoded `%2B` stays a `+` inside an id.
+  for (const part of (params.get('s') ?? '')
+    .split(/[|\s]+/)
+    .filter(Boolean)
+    .slice(0, 16)) {
     const [head, ...flags] = part.split('~')
     const source = decodeSource(head ?? '')
     if (!source) continue

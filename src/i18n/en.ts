@@ -187,7 +187,7 @@ export const en = {
   'help.k.pip': 'Mini control room (always on top, keeps playing while you use other apps)',
   'toast.noPip': 'This browser can’t open a page in picture-in-picture (Chrome and Edge on a computer can).',
   'ad.notice':
-    '{name} is paused or in an ad: click play in its player (Twitch waits for a click). It stays large and silent until it plays',
+    '{name} is in an ad: it stays large and silent until the stream comes back. If the countdown doesn’t move, click play in its player',
   'ad.blockedNotice':
     '{name} won’t start on its own: click play in the player. If it still won’t play, an ad blocker is the likely cause — Twitch refuses to play with one, disable it for this site',
   'help.background': 'In the background',

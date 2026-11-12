@@ -29,7 +29,7 @@ test('pasting five links builds the wall, and the address keeps the setup', asyn
   await expect(page.locator('[data-tile]')).toHaveCount(5)
   // Five streams switch to the main monitor + strip layout.
   await expect(page.getByRole('button', { name: 'Main', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page).toHaveURL(/#s=kk\.one%7Ckk\.two/)
+  await expect(page).toHaveURL(/#s=kk\.one\+kk\.two/)
   await page.reload()
   await expect(page.locator('[data-tile]')).toHaveCount(5)
 })

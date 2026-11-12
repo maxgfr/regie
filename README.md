@@ -42,7 +42,10 @@ Built for the evening when a tournament runs on five channels at once: the main 
   - Favourites that go live show a notice with an Add key, can be added on their own, and can raise a system notification when Regie is in the background.
   - Ended streams are labelled offline. Players that don't start get a line check, a retry and a "click to start" label.
 - **Find creators.** Search Twitch and Kick channels and see who's live, with their category and viewer count. Star favourites, add every live favourite in one click, and find recent streams again.
-- **The URL is the save file.** The whole setup lives in the address: copy it to share a multiview.
+- **The URL is the save file.** The whole setup lives in the address: copy it to share a multiview, or write one by hand:
+  - `#shroud+xqc`: Twitch channels, separated by `+`.
+  - `#shroud+yt.dQw4w9WgXcQ+kk.xqc&l=focus`: other platforms take a code (`yt.` YouTube video, `ytl.` YouTube live, `kk.` Kick, `twv.` Twitch VOD, `vm.` Vimeo, `dm.` Dailymotion, `v.` direct video link, `w.` any embeddable page).
+  - Options: `l=focus` or `l=theater` (layout), `f=1` (main monitor, counted from 0), `a=1` (stream with the sound), `m=mix` or `m=manual` (audio mode).
   - Named setups, favourites, history and your last settings stay in this browser.
   - Export everything to a JSON file and import it elsewhere.
 - **Keyboard first.**

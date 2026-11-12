@@ -193,7 +193,7 @@ export const fr: Record<MessageKey, string> = {
   'toast.noPip':
     'Ce navigateur ne sait pas ouvrir une page en picture-in-picture (Chrome et Edge sur ordinateur le peuvent).',
   'ad.notice':
-    '{name} est en pause ou en pub : cliquez sur lecture dans son player (Twitch attend un clic). Il reste en grand et sans le son jusqu’à la reprise',
+    '{name} est en pub : il reste en grand et sans le son jusqu’au retour du stream. Si le décompte ne bouge pas, cliquez sur lecture dans son player',
   'ad.blockedNotice':
     '{name} ne démarre pas tout seul : cliquez sur lecture dans le lecteur. S’il refuse toujours, c’est sans doute un bloqueur de pub — Twitch refuse de jouer avec, désactivez-le pour ce site',
   'help.background': 'En arrière-plan',

@@ -33,6 +33,22 @@ test('ad signatures: a full buffer behind a "buffering" player, or frames while 
   expect(read('Playing', 60, 1.2)).toBeNull()
 })
 
+test('an ad that plays has no broadcaster latency; the stream itself has one', () => {
+  const read = (latency: number, live = true) =>
+    adSignature(
+      readUpdate({
+        eventName: 'UPDATE_STATE',
+        params: { playback: 'Playing', stats: { videoStats: { fps: 30, hlsLatencyBroadcaster: latency } } },
+      }),
+      live,
+    )
+  // Observed during Twitch's "preparing your stream" pre-roll, then once the stream starts.
+  expect(read(0)).toBe('running')
+  expect(read(7.08)).toBeNull()
+  // A video has no broadcaster latency at all.
+  expect(read(0, false)).toBeNull()
+})
+
 test('ignores other messages', () => {
   expect(readUpdate(null)).toBeNull()
   expect(readUpdate({ eventName: 'OTHER', params: {} })).toBeNull()

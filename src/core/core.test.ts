@@ -222,6 +222,41 @@ describe('session', () => {
     })
   })
 
+  test('links are easy to write by hand: bare Twitch channels joined with +', () => {
+    const twitch = (id: string) => ({ platform: 'twitch' as const, kind: 'live' as const, id })
+    expect(decodeSession('#giuseppemdr+slash_ftv').tiles.map((t) => t.source)).toEqual([
+      twitch('giuseppemdr'),
+      twitch('slash_ftv'),
+    ])
+    const mixed = decodeSession('#shroud+yt.dQw4w9WgXcQ+kk.xqc&l=focus&a=2')
+    expect(mixed.tiles.map((t) => `${t.source.platform}:${t.source.id}`)).toEqual([
+      'twitch:shroud',
+      'youtube:dQw4w9WgXcQ',
+      'kick:xqc',
+    ])
+    expect(mixed.layout).toBe('focus')
+    expect(mixed.audioId).toBe(mixed.tiles[2]?.id ?? '')
+    // Older links keep working.
+    expect(decodeSession('#s=tw.giuseppemdr%7Ctw.slash_ftv').tiles.map((t) => t.source.id)).toEqual([
+      'giuseppemdr',
+      'slash_ftv',
+    ])
+    expect(decodeSession('#s=tw.a|tw.b~m').tiles.map((t) => [t.source.id, t.muted])).toEqual([
+      ['a', false],
+      ['b', true],
+    ])
+  })
+
+  test('the address it writes is the short form', () => {
+    const session = defaultSession()
+    session.tiles = [
+      newTile({ platform: 'twitch', kind: 'live', id: 'giuseppemdr' }),
+      newTile({ platform: 'twitch', kind: 'live', id: 'slash_ftv' }),
+      newTile({ platform: 'youtube', kind: 'vod', id: 'dQw4w9WgXcQ' }),
+    ]
+    expect(encodeSession(session)).toBe('s=giuseppemdr+slash_ftv+yt.dQw4w9WgXcQ')
+  })
+
   test('the default session encodes to nothing', () => {
     expect(encodeSession(defaultSession())).toBe('')
   })
