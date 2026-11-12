@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Regie</title>
+  <rect width="512" height="512" rx="96" fill="#0b0c0d"/>
+  <rect x="72" y="104" width="176" height="120" fill="#1d2023" stroke="#ff3b30" stroke-width="14"/>
+  <rect x="264" y="104" width="176" height="120" fill="#1d2023" stroke="#2fd36b" stroke-width="14"/>
+  <rect x="72" y="240" width="176" height="120" fill="#1d2023"/>
+  <rect x="264" y="240" width="176" height="120" fill="#1d2023"/>
+  <rect x="72" y="388" width="368" height="36" rx="6" fill="#141618"/>
+  <circle cx="110" cy="406" r="10" fill="#ff3b30"/>
+  <rect x="140" y="400" width="120" height="12" rx="3" fill="#ffb020"/>
+</svg>

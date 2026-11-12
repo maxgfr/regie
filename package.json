@@ -1,0 +1,40 @@
+{
+  "name": "regie",
+  "private": true,
+  "version": "0.0.0-development",
+  "description": "A control room for watching several streams at once: Twitch, YouTube, Kick, TikTok side by side, one on air, delays lined up, chats merged, sound away from ads. Static, anonymous, no account.",
+  "license": "MIT",
+  "author": "maxgfr",
+  "homepage": "https://maxgfr.github.io/regie/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maxgfr/regie.git"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot scripts/dev.ts",
+    "build": "bun scripts/build.ts",
+    "preview": "bunx serve -l 4173 dist",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "bun test src",
+    "test:e2e": "bunx playwright test",
+    "check": "bun run typecheck && bun run lint && bun run test && bun run build"
+  },
+  "dependencies": {
+    "@fontsource/barlow": "5.3.0",
+    "@fontsource/barlow-condensed": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "hls.js": "1.7.4",
+    "lucide": "1.72.0",
+    "remix": "3.2.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@biomejs/biome": "2.5.15",
+    "@playwright/test": "1.64.0",
+    "@types/bun": "1.4.3",
+    "typescript": "7.0.2"
+  }
+}

@@ -1,0 +1,43 @@
+name: Release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+  release:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      # Conventional commits decide the bump (feat → minor, fix → patch, BREAKING CHANGE → major); the release
+      # is a tag plus a GitHub release with notes, nothing is committed back.
+      - run: >-
+          npx --yes
+          -p semantic-release@25.0.9
+          -p @semantic-release/commit-analyzer@13.0.1
+          -p @semantic-release/release-notes-generator@14.1.1
+          -p @semantic-release/github@12.0.9
+          semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  deploy:
+    needs: release
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy.yml

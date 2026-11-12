@@ -1,0 +1,108 @@
+@layer base, rmx;
+
+@layer base {
+  :root {
+    --ground: #0b0c0d;
+    --panel: #141618;
+    --key: #1d2023;
+    --key-hover: #252a2e;
+    --line: #2a2e32;
+    --text: #e6e8e3;
+    --dim: #9aa1a9;
+    --pgm: #ff3b30;
+    --pgm-ink: #ff6a61;
+    --pvw: #2fd36b;
+    --amber: #ffb020;
+    --signal: #5ac8fa;
+    --umd: 28px;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --font-ui: "Barlow", system-ui, sans-serif;
+    --font-label: "Barlow Condensed", "Barlow", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+    color-scheme: dark;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    margin: 0;
+    height: 100%;
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 15px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  button,
+  input,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  fieldset {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  ::selection {
+    background: var(--amber);
+    color: #000;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--amber);
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+
+  input::placeholder {
+    color: #7d848c;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every component transition */
+      transition-duration: 0s !important;
+      /* biome-ignore lint/complexity/noImportantStyles: same, for animations */
+      animation-duration: 0s !important;
+    }
+  }
+}
