@@ -194,5 +194,16 @@ export const fr: Record<MessageKey, string> = {
   'help.background': 'En arrière-plan',
   'help.backgroundText':
     'Les streams continuent dans un onglet en arrière-plan ou une fenêtre réduite. Pour regarder en utilisant d’autres apps, ouvrez la mini-régie (P) : une fenêtre toujours au premier plan avec le stream à l’antenne. Sur téléphone, le système met en pause les players des autres sites quand le navigateur quitte l’écran : aucune page web ne peut l’empêcher.',
+  'alert.live': '{name} est en direct',
+  'alert.add': 'Ajouter',
+  'alert.dismiss': 'Ignorer',
+  'library.autoAdd': 'Ajouter les favoris quand ils passent en direct',
+  'library.autoAddHint':
+    'Vérifié toutes les 90 s tant que Regie est ouvert. Désactivé : un bandeau propose de les ajouter.',
+  'library.notify': 'Me prévenir',
+  'library.notifyHint':
+    'Une notification système quand un favori passe en direct pendant que Regie est en arrière-plan.',
+  'library.notifyOn': 'Notifications activées',
+  'tile.badgeOffline': 'Hors ligne',
   'drop.hint': 'Lâchez le lien pour ajouter le stream',
 }

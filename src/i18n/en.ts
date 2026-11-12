@@ -188,6 +188,15 @@ export const en = {
   'help.background': 'In the background',
   'help.backgroundText':
     'Streams keep playing in a background tab or a minimised window. To watch while using other apps, open the mini control room (P): an always-on-top window with the stream on air. On phones, the system pauses other sites’ players when the browser leaves the screen: no web page can prevent that.',
+  'alert.live': '{name} is live',
+  'alert.add': 'Add',
+  'alert.dismiss': 'Dismiss',
+  'library.autoAdd': 'Add favourites when they go live',
+  'library.autoAddHint': 'Checked every 90 s while Regie is open. Off: a notice offers to add them.',
+  'library.notify': 'Notify me',
+  'library.notifyHint': 'A system notification when a favourite goes live while Regie is in the background.',
+  'library.notifyOn': 'Notifications on',
+  'tile.badgeOffline': 'Offline',
   'drop.hint': 'Drop the link to add the stream',
 } as const
 

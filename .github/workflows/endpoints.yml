@@ -1,0 +1,39 @@
+name: Endpoints
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  # Daily check of the third-party endpoints Regie relies on (some are unofficial). A failure opens, or
+  # comments on, one issue; a later success closes it.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - id: run
+        run: |
+          set +e
+          bun scripts/endpoints.ts > report.txt 2>&1
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+          cat report.txt >> "$GITHUB_STEP_SUMMARY"
+          cat report.txt
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATUS: ${{ steps.run.outputs.status }}
+        run: |
+          title="An endpoint Regie depends on is failing"
+          issue=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')
+          if [ "$STATUS" != "0" ]; then
+            body="$(printf 'Daily check, %s:\n\n%s\n\nRun: %s/%s/actions/runs/%s' "$(date -u +%F)" "$(cat report.txt)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+            if [ -n "$issue" ]; then gh issue comment "$issue" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
+            exit 1
+          elif [ -n "$issue" ]; then
+            gh issue close "$issue" --comment "All endpoints answer again ($(date -u +%F))."
+          fi

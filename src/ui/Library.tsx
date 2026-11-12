@@ -8,7 +8,7 @@ import type { Source } from '../core/types.ts'
 import { t } from '../i18n/index.ts'
 import { type Creator, kickChannel, searchCreators, twitchChannels } from '../platforms/directory.ts'
 import { platformLabel, sourceName } from '../platforms/parse.ts'
-import { keyStyle } from './controls.tsx'
+import { keyStyle, switchStyle } from './controls.tsx'
 import { Icon } from './Icon.tsx'
 import { sheetStyle } from './Sheets.tsx'
 
@@ -341,6 +341,41 @@ export function LibrarySheet(handle: Handle<{ store: Store }>) {
 
         {tab === 'favorites' && (
           <div role="tabpanel">
+            <label mix={switchStyle} style={{ marginBottom: '10px' }}>
+              <input
+                type="checkbox"
+                checked={store.session.autoAdd}
+                mix={on('change', (event) => store.setAutoAdd(event.currentTarget.checked))}
+              />
+              <span>
+                <strong>{t('library.autoAdd')}</strong>
+                <small>{t('library.autoAddHint')}</small>
+              </span>
+            </label>
+            {typeof Notification !== 'undefined' && (
+              <p class="hint" style={{ margin: '0 0 12px' }}>
+                {Notification.permission === 'granted' ? (
+                  t('library.notifyOn')
+                ) : (
+                  <button
+                    type="button"
+                    data-tone="white"
+                    title={t('library.notifyHint')}
+                    disabled={Notification.permission === 'denied'}
+                    mix={[
+                      keyStyle,
+                      on('click', async () => {
+                        await Notification.requestPermission().catch(() => undefined)
+                        handle.update()
+                      }),
+                    ]}
+                  >
+                    {t('library.notify')}
+                  </button>
+                )}{' '}
+                {t('library.notifyHint')}
+              </p>
+            )}
             <div class="toolbar">
               <button
                 type="button"

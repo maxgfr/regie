@@ -6,6 +6,7 @@ Static multi-stream viewer deployed on GitHub Pages. Read `PRODUCT.md` (product 
 
 - `bun run dev`: dev server on :5173 (`scripts/dev.ts` serves the bundled page, `public/` and fonts).
 - `bun run check`: typecheck + Biome + unit tests + build. It must stay green.
+- `bun run endpoints`: checks the real third-party endpoints (also run daily by `.github/workflows/endpoints.yml`).
 - `bun run test:e2e`: Playwright on `dist/` (run `bun run build` first). Every third-party request is stubbed.
 
 ## Rules that are easy to break

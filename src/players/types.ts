@@ -19,6 +19,8 @@ export interface Player {
   pause(): void
   /** Moves the playback position; negative goes back in time (adds delay). Returns false if not possible. */
   seekBy(seconds: number): boolean
+  /** Matches the stream quality to the size the player is shown at (`main` keeps automatic quality). */
+  fit?(displayHeight: number, main: boolean): void
   destroy(): void
 }
 

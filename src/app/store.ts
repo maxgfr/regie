@@ -80,6 +80,8 @@ export class Store extends TypedEventTarget<Events> {
     miniRegie: false,
     /** The browser offered to install the app. */
     installable: false,
+    /** Favourites that just went live and aren't on the wall. */
+    liveAlerts: [] as Creator[],
     toast: null as string | null,
   }
   chatLog: ChatMessage[] = []
@@ -122,6 +124,8 @@ export class Store extends TypedEventTarget<Events> {
     setInterval(() => this.#tick(), 1000)
     setInterval(() => this.#releaseChat(), 250)
     setInterval(() => this.refreshInfo(), 60_000)
+    setInterval(() => this.watchFavorites(), 90_000)
+    this.watchFavorites()
   }
 
   /** Base settings of a new session: the defaults, then what this browser saved last time. */
@@ -132,11 +136,68 @@ export class Store extends TypedEventTarget<Events> {
     if (typeof saved.audioMode === 'string' && modes.includes(saved.audioMode)) base.audioMode = saved.audioMode
     if (saved.transition === 'cut' || saved.transition === 'mix') base.transition = saved.transition
     if (typeof saved.duck === 'number' && saved.duck >= 0 && saved.duck <= 1) base.duck = saved.duck
-    for (const key of ['liveChat', 'antiSpoiler', 'autoDirector', 'adSwitch', 'chatOpen'] as const) {
+    for (const key of ['liveChat', 'antiSpoiler', 'autoDirector', 'adSwitch', 'chatOpen', 'autoAdd'] as const) {
       if (typeof saved[key] === 'boolean') base[key] = saved[key]
     }
     if (Array.isArray(saved.keywords)) base.keywords = saved.keywords.filter((w) => typeof w === 'string').slice(0, 20)
     return base
+  }
+
+  /** Favourites known to be live, to notice the ones that just started. Null until the first check. */
+  #liveFavorites: Set<string> | null = null
+
+  /**
+   * Watches favourites: one that goes live is added to the wall (when "auto-add" is on) or offered in a notice,
+   * with a system notification when Regie is in the background and notifications are allowed.
+   */
+  async watchFavorites() {
+    const favorites = library.favorites().filter((f) => f.source.kind === 'live')
+    const twitch = favorites.filter((f) => f.source.platform === 'twitch').map((f) => f.source.id)
+    const kick = favorites
+      .filter((f) => f.source.platform === 'kick')
+      .map((f) => f.source.id)
+      .slice(0, 8)
+    const [found, kicks] = await Promise.all([twitchChannels(twitch), Promise.all(kick.map((id) => kickChannel(id)))])
+    const live = [...found, ...kicks].filter((creator): creator is Creator => Boolean(creator?.live))
+    const keys = new Set(live.map((creator) => `${creator.platform}:${creator.id}`))
+    const previous = this.#liveFavorites
+    this.#liveFavorites = keys
+    if (!previous) return
+    const onWall = (creator: Creator) =>
+      this.session.tiles.some((tile) => tile.source.platform === creator.platform && tile.source.id === creator.id)
+    const started = live.filter((creator) => !previous.has(`${creator.platform}:${creator.id}`) && !onWall(creator))
+    if (!started.length) return
+    for (const creator of started) {
+      if (this.session.autoAdd && this.session.tiles.length < 16) {
+        this.add({ platform: creator.platform, kind: 'live', id: creator.id })
+        this.toast(`● ${creator.name}`)
+      } else {
+        this.ui.liveAlerts = [creator, ...this.ui.liveAlerts.filter((c) => c.id !== creator.id)].slice(0, 3)
+      }
+      if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        try {
+          new Notification(creator.name, {
+            body: [creator.category, creator.title].filter(Boolean).join(' · '),
+            icon: creator.avatar,
+            tag: `regie-${creator.id}`,
+          })
+        } catch {
+          // Notifications can be refused by the system.
+        }
+      }
+    }
+    this.#emit('change')
+  }
+
+  dismissAlert(creator: Creator, add: boolean) {
+    this.ui.liveAlerts = this.ui.liveAlerts.filter((c) => !(c.id === creator.id && c.platform === creator.platform))
+    if (add) this.add({ platform: creator.platform, kind: 'live', id: creator.id })
+    else this.#emit('change')
+  }
+
+  setAutoAdd(on: boolean) {
+    this.session.autoAdd = on
+    this.changed()
   }
 
   /** Live status of the Twitch and Kick channels on the wall (anonymous public endpoints). */
@@ -326,6 +387,12 @@ export class Store extends TypedEventTarget<Events> {
     this.ui.warmup = next ? { id: next, since: Date.now() } : null
     if (!next) this.#warmTotal = 0
     this.#emit('change')
+  }
+
+  /** Matches a player's stream quality to the size it is shown at (Twitch). */
+  fitPlayer(id: string, displayHeight: number, large: boolean) {
+    const player = this.players.get(id)
+    if (player?.fit) safely(() => player.fit?.(displayHeight, large))
   }
 
   /** Players that never started (autoplay refused) get another go on the next user gesture. */

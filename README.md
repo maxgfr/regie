@@ -35,6 +35,10 @@ Built for the evening when a tournament runs on five channels at once: the main 
   - The official chat of each stream sits in a tab.
   - **Merged Twitch chat** (optional): read-only and anonymous, every channel in one column. Each message is held back by its stream's latency and lead (**anti-spoiler**), so chat never reveals what the picture hasn't shown yet. It can also highlight words like "ace" or "clutch".
   - **Auto-director** (optional): when a chat spikes against its own baseline, that stream takes the sound for 20 s.
+- **On autopilot.**
+  - Each small Twitch monitor plays the lowest quality that still fills it (360p instead of 1080p), while the main monitor stays on auto. A five-stream wall uses a fraction of the bandwidth.
+  - Favourites that go live show a notice with an Add key, can be added on their own, and can raise a system notification when Regie is in the background.
+  - Ended streams are labelled offline. Players that don't start get a line check, a retry and a "click to start" label.
 - **Find creators.** Search Twitch and Kick channels and see who's live, with their category and viewer count. Star favourites, add every live favourite in one click, and find recent streams again.
 - **The URL is the save file.** The whole setup lives in the address: copy it to share a multiview.
   - Named setups, favourites, history and your last settings stay in this browser.
@@ -105,7 +109,11 @@ src/
   ui/          Remix components: stage, monitors, vision mixer console, chat dock, library, test card
 ```
 
-Pushes to `main` run CI, then semantic-release tags a version from the conventional commits and the site deploys to GitHub Pages.
+Automation:
+
+- Pushes to `main` run CI. semantic-release then tags a version from the conventional commits, and the site deploys to GitHub Pages.
+- Dependabot opens one grouped pull request a week for packages and one for actions. Minor and patch updates merge on their own once CI passes.
+- A daily workflow (`bun run endpoints`) checks every third-party endpoint Regie relies on, including the unofficial Twitch GraphQL. A failure opens, or comments on, one issue, and the next success closes it.
 
 ## License
 

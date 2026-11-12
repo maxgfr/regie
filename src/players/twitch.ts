@@ -1,3 +1,4 @@
+import { parseTwitchQuality, pickQuality, type Quality } from '../core/quality.ts'
 import { loadScript } from './load-script.ts'
 import type { Player, PlayerContext } from './types.ts'
 
@@ -11,6 +12,8 @@ interface TwitchPlayer {
   getCurrentTime(): number
   isPaused(): boolean
   getPlaybackStats(): { hlsLatencyBroadcaster?: number } | undefined
+  getQualities(): { group?: string; name?: string }[]
+  setQuality(quality: string): void
   getIframe?(): HTMLIFrameElement
 }
 
@@ -63,6 +66,28 @@ export function createTwitchPlayer(context: PlayerContext): Player {
     if (wanted > 0) player.setVolume(wanted)
   }
 
+  // Quality follows the monitor's size; only changed when the choice changes, and once the stream plays.
+  let fitting: { height: number; main: boolean } | null = null
+  let quality = ''
+  const applyQuality = () => {
+    if (!player || !ready || !playing || inAd || !fitting) return
+    try {
+      const available = player
+        .getQualities()
+        .map((q) => parseTwitchQuality(q.group ?? ''))
+        .filter((q): q is Quality => q !== null)
+      // Device pixels count, but only up to 1.25×: on a Retina wall a small monitor at 360p looks the
+      // same and costs a third of 720p.
+      const density = Math.min(window.devicePixelRatio || 1, 1.25)
+      const next = pickQuality(available, Math.round(fitting.height * density), fitting.main)
+      if (next === quality) return
+      quality = next
+      player.setQuality(next)
+    } catch {
+      // Qualities aren't known yet; the next fit or the next "playing" tries again.
+    }
+  }
+
   const onMessage = (event: MessageEvent) => {
     if (event.origin !== 'https://player.twitch.tv') return
     if (event.source !== element.querySelector('iframe')?.contentWindow) return
@@ -107,6 +132,8 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       instance.addEventListener(Twitch.Player.PLAYING, () => {
         playing = true
         apply()
+        quality = ''
+        applyQuality()
         events.state('playing', true)
       })
       instance.addEventListener(Twitch.Player.PLAYBACK_BLOCKED, () => {
@@ -153,6 +180,10 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       if (!player || !ready || source.kind !== 'vod') return false
       player.seek(Math.max(0, player.getCurrentTime() + seconds))
       return true
+    },
+    fit(displayHeight, main) {
+      fitting = { height: displayHeight, main }
+      applyQuality()
     },
     destroy() {
       destroyed = true

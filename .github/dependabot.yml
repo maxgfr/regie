@@ -1,0 +1,24 @@
+version: 2
+updates:
+  # One grouped pull request a week for the app's packages, and one for the workflow actions.
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      dependencies:
+        patterns: ['*']
+    commit-message:
+      prefix: chore
+      include: scope
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci

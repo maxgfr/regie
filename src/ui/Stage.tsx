@@ -182,6 +182,7 @@ const umdStyle = css({
   '& .tag[data-kind="main"]': { background: 'var(--pvw)', color: '#04150a' },
   '& .tag[data-kind="ad"]': { background: 'var(--amber)', color: '#1a1000' },
   '& .tag[data-kind="hype"]': { background: 'var(--text)', color: '#000' },
+  '& .tag[data-kind="offline"]': { background: 'var(--key)', color: 'var(--dim)' },
   '& .tag[data-kind="start"]': {
     background: 'transparent',
     color: 'var(--amber)',
@@ -323,6 +324,7 @@ function TileView(handle: Handle<TileProps>) {
   })
   // In full screen the monitor fills the display, so the player inside must stop using its wall size.
   let fullscreen = false
+  let fitted = ''
   const keep = ref((node: HTMLElement, signal) => {
     element = node
     // Listened on the document: leaving full screen isn't always reported to the element itself.
@@ -368,6 +370,15 @@ function TileView(handle: Handle<TileProps>) {
           ? t('tile.latency', { s: seconds(runtime.latency).replace('+', '') })
           : ''
     const syncing = store.ui.syncOpen && tile.source.kind !== 'unembeddable'
+    // Stream quality follows the monitor's size; the main, boosted or full-screen monitor stays on auto.
+    if (attached && rect && rect.w > 0) {
+      const large = main || Boolean(rect.boosted) || fullscreen
+      const fit = `${Math.round(screenH / 40)}:${large}`
+      if (fit !== fitted) {
+        fitted = fit
+        handle.queueTask(() => store.fitPlayer(id, screenH, large))
+      }
+    }
     if (!attached && rect && rect.w > 0) {
       handle.queueTask(() => {
         if (attached || !screen) return
@@ -492,6 +503,11 @@ function TileView(handle: Handle<TileProps>) {
             {inAd && (
               <span class="tag" data-kind="ad">
                 {t('tile.badgeAd')}
+              </span>
+            )}
+            {(runtime?.state === 'offline' || (info && !info.live)) && (
+              <span class="tag" data-kind="offline">
+                {t('tile.badgeOffline')}
               </span>
             )}
             {store.waitingForClick(id) && (

@@ -97,6 +97,34 @@ const adNoticeStyle = css({
   textTransform: 'uppercase',
 })
 
+const alertStyle = css({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '10px',
+  minWidth: 0,
+  padding: '6px 14px',
+  background: '#111315',
+  borderTop: '1px solid var(--pgm)',
+  '& img': { width: '24px', height: '24px', borderRadius: '50%' },
+  '& strong': {
+    flex: 'none',
+    fontFamily: 'var(--font-label)',
+    fontWeight: 700,
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
+    color: 'var(--pgm-ink)',
+  },
+  '& .meta': {
+    flex: '1 1 auto',
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    color: 'var(--dim)',
+    fontSize: '14px',
+  },
+})
+
 const toastStyle = css({
   padding: '7px 16px',
   background: '#e6e8e3',
@@ -251,6 +279,28 @@ export function App(handle: Handle<{ store: Store }>) {
               {t('ad.notice', { name: store.label(store.twitchAds()[0] as string) })}
             </div>
           )}
+          {ui.liveAlerts.map((creator) => (
+            <div key={`${creator.platform}:${creator.id}`} role="status" mix={alertStyle}>
+              {creator.avatar && <img src={creator.avatar} alt="" referrerPolicy="no-referrer" />}
+              <strong>{t('alert.live', { name: creator.name })}</strong>
+              <span class="meta">{[creator.category, creator.title].filter(Boolean).join(' · ')}</span>
+              <button
+                type="button"
+                data-tone="red"
+                aria-pressed="true"
+                mix={[keyStyle, on('click', () => store.dismissAlert(creator, true))]}
+              >
+                {t('alert.add')}
+              </button>
+              <button
+                type="button"
+                data-tone="white"
+                mix={[keyStyle, on('click', () => store.dismissAlert(creator, false))]}
+              >
+                {t('alert.dismiss')}
+              </button>
+            </div>
+          ))}
           {ui.syncOpen && <SyncBar store={store} />}
           {toast && (
             <div role="status" mix={toastStyle}>

@@ -20,7 +20,8 @@
     "format": "biome check --write .",
     "test": "bun test src",
     "test:e2e": "bunx playwright test",
-    "check": "bun run typecheck && bun run lint && bun run test && bun run build"
+    "check": "bun run typecheck && bun run lint && bun run test && bun run build",
+    "endpoints": "bun scripts/endpoints.ts"
   },
   "dependencies": {
     "@fontsource/barlow": "5.3.0",

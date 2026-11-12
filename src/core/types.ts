@@ -45,6 +45,8 @@ export interface Session {
   keywords: string[]
   autoDirector: boolean
   adSwitch: boolean
+  /** Favourites that go live are added to the wall on their own. */
+  autoAdd: boolean
 }
 
 export interface Rect {
