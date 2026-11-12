@@ -116,3 +116,27 @@ test('French is picked from the browser language', async ({ browser }) => {
   await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
   await context.close()
 })
+
+test('a monitor in full screen fills the display, picture included', async ({ page }) => {
+  await page.goto('/#s=w.https://example.com/a|w.https://example.com/b|w.https://example.com/c')
+  await expect(page.locator('[data-tile] iframe')).toHaveCount(3)
+  const tile = page.locator('[data-tile]').first()
+  await tile.getByRole('button', { name: 'Full screen' }).click()
+  await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(true)
+  // The label strip is hidden in full screen: the picture takes the whole display.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const box = (document.querySelector('[data-tile] .player') as HTMLElement).getBoundingClientRect()
+        return [Math.round(box.width), Math.round(box.height)]
+      }),
+    )
+    .toEqual([1440, 900])
+  await page.evaluate(() => document.exitFullscreen())
+  await expect.poll(() => page.evaluate(() => Boolean(document.fullscreenElement))).toBe(false)
+  await expect
+    .poll(() =>
+      page.evaluate(() => (document.querySelector('[data-tile] .player') as HTMLElement).getBoundingClientRect().width),
+    )
+    .toBeLessThan(1440)
+})

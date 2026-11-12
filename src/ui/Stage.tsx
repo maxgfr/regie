@@ -130,7 +130,6 @@ const tileStyle = css({
   '&[data-tally="pvw"]': { boxShadow: '0 0 0 3px var(--pvw)' },
   '&[data-ad="true"]': { boxShadow: '0 0 0 3px var(--amber)' },
   '&[data-ad="true"][data-tally="pgm"]': { boxShadow: '0 0 0 3px var(--amber)' },
-  '&:fullscreen .umd': { display: 'none' },
 })
 
 const umdStyle = css({
@@ -322,8 +321,21 @@ function TileView(handle: Handle<TileProps>) {
   const mount = ref((node: HTMLElement) => {
     screen = node
   })
-  const keep = ref((node: HTMLElement) => {
+  // In full screen the monitor fills the display, so the player inside must stop using its wall size.
+  let fullscreen = false
+  const keep = ref((node: HTMLElement, signal) => {
     element = node
+    // Listened on the document: leaving full screen isn't always reported to the element itself.
+    document.addEventListener(
+      'fullscreenchange',
+      () => {
+        const next = document.fullscreenElement === node
+        if (next === fullscreen) return
+        fullscreen = next
+        handle.update()
+      },
+      { signal },
+    )
   })
 
   return () => {
@@ -411,11 +423,15 @@ function TileView(handle: Handle<TileProps>) {
         <div class="screen">
           <div
             class="player"
-            style={{
-              width: `${screenW / scale}px`,
-              height: `${screenH / scale}px`,
-              transform: scale < 1 ? `scale(${scale})` : 'none',
-            }}
+            style={
+              fullscreen
+                ? { width: '100%', height: '100%', transform: 'none' }
+                : {
+                    width: `${screenW / scale}px`,
+                    height: `${screenH / scale}px`,
+                    transform: scale < 1 ? `scale(${scale})` : 'none',
+                  }
+            }
             mix={tile.source.kind === 'unembeddable' ? undefined : mount}
           />
           {tile.source.kind === 'unembeddable' && (
@@ -436,6 +452,7 @@ function TileView(handle: Handle<TileProps>) {
           )}
         </div>
         <footer
+          class="umd"
           data-tally={tally}
           data-compact={box.w < 420}
           data-tiny={box.w < 300}

@@ -106,3 +106,8 @@
     }
   }
 }
+
+/* A monitor in full screen shows only its picture. Unlayered, so it wins over the generated component styles. */
+[data-tile]:fullscreen > footer {
+  display: none;
+}
