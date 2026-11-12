@@ -1,11 +1,13 @@
 import {
   CircleHelp,
+  Download,
   FastForward,
   FolderOpen,
   Link2,
   MegaphoneOff,
   MessagesSquare,
   Pause,
+  PictureInPicture2,
   Play,
   Plus,
   Rewind,
@@ -19,6 +21,8 @@ import { t } from '../i18n/index.ts'
 import { capabilities, parseSource } from '../platforms/parse.ts'
 import { Fader, groupStyle, Key, keyStyle } from './controls.tsx'
 import { Icon } from './Icon.tsx'
+import { openMiniRegie, pipSupported } from './pip.ts'
+import { install } from './pwa.ts'
 
 const consoleStyle = css({
   display: 'flex',
@@ -357,6 +361,24 @@ export function Console(handle: Handle<{ store: Store; inputRef: (node: HTMLInpu
               pressed={store.ui.libraryOpen}
               onPress={() => store.openLibrary()}
             />
+            {pipSupported() && (
+              <Key
+                label={<Icon icon={PictureInPicture2} />}
+                ariaLabel={t('console.pip')}
+                title={`${t('console.pip')} (P)`}
+                pressed={store.ui.miniRegie}
+                disabled={!tiles.length}
+                onPress={() => openMiniRegie(store)}
+              />
+            )}
+            {store.ui.installable && (
+              <Key
+                label={<Icon icon={Download} />}
+                ariaLabel={t('console.install')}
+                title={t('console.install')}
+                onPress={() => install(store)}
+              />
+            )}
             <Key
               label={<Icon icon={Link2} />}
               ariaLabel={t('console.share')}

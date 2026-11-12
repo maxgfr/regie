@@ -13,7 +13,7 @@ const update = (playback: string, fps: number, latency = 0) => ({
 })
 
 test('reads playback, frame rate and latency from the player messages', () => {
-  expect(readUpdate(update('Playing', 30, 2.6))).toEqual({ playback: 'Playing', fps: 30, latency: 2.6 })
+  expect(readUpdate(update('Playing', 30, 2.6))).toEqual({ playback: 'Playing', fps: 30, latency: 2.6, muted: true })
   // An ad: the player is "Idle" while frames keep coming.
   expect(readUpdate(update('Idle', 25))).toMatchObject({ playback: 'Idle', fps: 25 })
 })

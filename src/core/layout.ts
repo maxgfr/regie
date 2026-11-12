@@ -14,6 +14,11 @@ export interface LayoutInput {
   gap?: number
   /** Fixed height under each picture (the label strip), so the picture itself keeps its aspect. */
   chrome?: number
+  /**
+   * A tile that must be shown large for a while (a Twitch player starting, or playing an ad that only
+   * counts down when the player is large and visible). It shares the main area with the focus tile.
+   */
+  boostId?: string | null
 }
 
 export interface Placed extends Rect {
@@ -22,6 +27,8 @@ export interface Placed extends Rect {
   main: boolean
   /** Drawn above the others (picture in picture). */
   overlay: boolean
+  /** Shown large for a while next to the main tile (see `boostId`). */
+  boosted?: boolean
 }
 
 interface Grid {
@@ -82,7 +89,7 @@ function inCell(cell: Rect, aspect: number, chrome: number): Rect {
 }
 
 interface FocusCandidate {
-  main: Rect
+  mains: Rect[]
   others: Rect[]
   score: number
 }
@@ -93,14 +100,15 @@ interface FocusCandidate {
  * the most room while the others stay watchable.
  */
 function focusLayout(
-  main: LayoutTile,
+  mains: LayoutTile[],
   others: LayoutTile[],
   w: number,
   h: number,
   gap: number,
   chrome: number,
 ): FocusCandidate {
-  const aspect = cellAspect(others.length ? others : [main])
+  const aspect = cellAspect(others.length ? others : mains)
+  const mainAspect = cellAspect(mains)
   let best: FocusCandidate | null = null
   for (const side of ['right', 'bottom'] as const) {
     for (let pct = 0.12; pct <= 0.5; pct += 0.01) {
@@ -116,21 +124,29 @@ function focusLayout(
         mainArea = { x: 0, y: 0, w, h: h - sh - gap }
       }
       if (mainArea.w <= 0 || mainArea.h <= 0) continue
-      let mainRect = fit(mainArea, main.aspect, chrome)
+      let mainRects =
+        mains.length === 1
+          ? [fit(mainArea, (mains[0] as LayoutTile).aspect, chrome)]
+          : gridRects(mains.length, mainArea, mainAspect, gap, chrome)
+      const first = mainRects[0] as Rect
       const cells = gridRects(others.length, strip, aspect, gap, chrome)
       const small = cells[0] ? cells[0].w * cells[0].h : 0
-      const mainSize = mainRect.w * mainRect.h
+      const mainSize = mainRects.reduce((sum, rect) => sum + rect.w * rect.h, 0)
       // The main tile matters most, but a strip of postage stamps is useless: reward the small tiles,
       // and penalise those far below a third of the main tile's width.
-      const watchable = cells[0] ? Math.min(1, cells[0].w / (mainRect.w * 0.3)) : 1
+      const watchable = cells[0] ? Math.min(1, cells[0].w / (first.w * 0.3)) : 1
       const score = mainSize + 0.6 * small * others.length * watchable - (watchable < 0.6 ? mainSize : 0)
-      // Pull the main tile against the strip, so the empty space sits on the outer edge.
-      if (side === 'right') mainRect = { ...mainRect, x: Math.max(0, strip.x - gap - mainRect.w) }
-      else mainRect = { ...mainRect, y: Math.max(0, strip.y - gap - mainRect.h) }
-      if (!best || score > best.score) best = { main: mainRect, others: cells, score }
+      // Pull a single main tile against the strip, so the empty space sits on the outer edge.
+      if (mains.length === 1) {
+        mainRects =
+          side === 'right'
+            ? [{ ...first, x: Math.max(0, strip.x - gap - first.w) }]
+            : [{ ...first, y: Math.max(0, strip.y - gap - first.h) }]
+      }
+      if (!best || score > best.score) best = { mains: mainRects, others: cells, score }
     }
   }
-  return best ?? { main: fit({ x: 0, y: 0, w, h }, main.aspect, chrome), others: [], score: 0 }
+  return best ?? { mains: gridRects(mains.length, { x: 0, y: 0, w, h }, mainAspect, gap, chrome), others: [], score: 0 }
 }
 
 /** Where each tile goes. Pure: depends only on its input. Tiles keep their input order in the output. */
@@ -143,7 +159,9 @@ export function computeLayout(input: LayoutInput): Placed[] {
   const focus = tiles.find((tile) => tile.id === input.focusId) ?? tiles[0]
   if (!focus) return []
 
-  if (mode === 'grid' || tiles.length === 1) {
+  const boost = tiles.find((tile) => tile.id === input.boostId)
+
+  if ((mode === 'grid' && !boost) || tiles.length === 1) {
     const aspect = cellAspect(tiles)
     const cells = gridRects(tiles.length, area, aspect, gap, chrome)
     return tiles.map((tile, index) => ({
@@ -156,7 +174,7 @@ export function computeLayout(input: LayoutInput): Placed[] {
 
   const others = tiles.filter((tile) => tile !== focus)
 
-  if (mode === 'theater') {
+  if (mode === 'theater' && !boost) {
     const main = fit(area, focus.aspect, chrome)
     const pipW = Math.max(160, Math.min(width * 0.18, 360))
     const pipAspect = cellAspect(others)
@@ -180,10 +198,16 @@ export function computeLayout(input: LayoutInput): Placed[] {
     })
   }
 
-  const { main, others: cells } = focusLayout(focus, others, width, height, gap, chrome)
+  const mains = boost && boost !== focus ? [focus, boost] : [boost ?? focus]
+  const rest = tiles.filter((tile) => !mains.includes(tile))
+  const { mains: mainRects, others: cells } = focusLayout(mains, rest, width, height, gap, chrome)
   return tiles.map((tile) => {
-    if (tile === focus) return { id: tile.id, ...main, main: true, overlay: false }
-    const cell = cells[others.indexOf(tile)] as Rect
+    const slot = mains.indexOf(tile)
+    if (slot >= 0) {
+      const rect = inCell(mainRects[slot] as Rect, tile.aspect, chrome)
+      return { id: tile.id, ...rect, main: tile === focus, overlay: false, boosted: tile === boost && boost !== focus }
+    }
+    const cell = cells[rest.indexOf(tile)] as Rect
     return { id: tile.id, ...inCell(cell, tile.aspect, chrome), main: false, overlay: false }
   })
 }

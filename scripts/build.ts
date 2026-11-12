@@ -20,5 +20,14 @@ await cp('public', 'dist', { recursive: true })
 await mkdir('dist/fonts', { recursive: true })
 for (const file of fontFiles()) await Bun.write(`dist/fonts/${file.name}`, Bun.file(file.path))
 await Bun.write('dist/fonts/fonts.css', fontCss())
+// Files copied as they are can't go through the bundler, so their links are added to the built page.
+const page = await Bun.file('dist/index.html').text()
+const links = [
+  '<link rel="manifest" href="./manifest.webmanifest" />',
+  '<link rel="icon" href="./icon.svg" type="image/svg+xml" />',
+  '<link rel="apple-touch-icon" href="./icon-192.png" />',
+  '<link rel="stylesheet" href="./fonts/fonts.css" />',
+].join('')
+await Bun.write('dist/index.html', page.replace('</head>', `${links}</head>`))
 const size = result.outputs.reduce((sum, output) => sum + output.size, 0)
 console.log(`Built ${result.outputs.length} files, ${(size / 1024).toFixed(0)} KB (fonts and public files apart)`)

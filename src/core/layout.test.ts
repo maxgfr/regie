@@ -107,6 +107,28 @@ describe('computeLayout', () => {
     for (const p of placed) expect(inside(p, 1920, 1080)).toBe(true)
   })
 
+  test('a boosted tile shares the main area and gets at least 400 × 300 of picture', () => {
+    for (const mode of ['grid', 'focus', 'theater'] as const) {
+      const placed = computeLayout({
+        tiles: landscape(5),
+        width: 1440,
+        height: 760,
+        mode,
+        focusId: 't0',
+        boostId: 't3',
+        gap: 8,
+        chrome: 28,
+      })
+      const boosted = placed.find((p) => p.id === 't3') as Rect & { boosted?: boolean }
+      expect(boosted.boosted).toBe(true)
+      expect(boosted.w).toBeGreaterThanOrEqual(400)
+      expect(boosted.h - 28).toBeGreaterThanOrEqual(225)
+      expect(placed.find((p) => p.main)?.id).toBe('t0')
+      for (let i = 0; i < placed.length; i++)
+        for (let j = i + 1; j < placed.length; j++) expect(overlaps(placed[i] as Rect, placed[j] as Rect)).toBe(false)
+    }
+  })
+
   test('nothing to place', () => {
     expect(computeLayout({ tiles: [], width: 100, height: 100, mode: 'grid', focusId: null })).toEqual([])
     expect(computeLayout({ tiles: landscape(2), width: 0, height: 100, mode: 'grid', focusId: null })).toEqual([])

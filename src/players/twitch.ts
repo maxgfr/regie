@@ -52,28 +52,36 @@ export function createTwitchPlayer(context: PlayerContext): Player {
 
   // The player iframe reports its full state to the page. During an ad, Twitch reports `Idle` playback
   // while video frames keep coming: that is the only ad signal an embed gets (observed, undocumented).
+  // Autoplay with sound can be refused (PLAYBACK_BLOCKED): the player starts muted, and the sound only comes
+  // on once it really plays. Ads are always silent here: another stream carries the sound meanwhile.
+  let playing = false
+  let adStreak = 0
+  const expectMuted = () => wanted <= 0 || !playing || inAd
+  const apply = () => {
+    if (!player || !ready) return
+    player.setMuted(expectMuted())
+    if (wanted > 0) player.setVolume(wanted)
+  }
+
   const onMessage = (event: MessageEvent) => {
     if (event.origin !== 'https://player.twitch.tv') return
     if (event.source !== element.querySelector('iframe')?.contentWindow) return
     const update = readUpdate(event.data)
     if (!update) return
     if (update.latency && update.latency > 0) events.latency(update.latency)
-    const ad = update.playback === 'Idle' && update.fps > 0
-    if (ad !== inAd && (ad || update.playback === 'Playing')) {
+    // Two messages in a row (about two seconds), so a stream that is just starting doesn't flash "ad".
+    adStreak = update.playback === 'Idle' && update.fps > 0 ? adStreak + 1 : 0
+    const ad = adStreak >= 2 ? true : update.playback === 'Playing' ? false : inAd
+    if (ad !== inAd) {
       inAd = ad
+      if (!ad) playing = true
       events.adHint(ad)
+      apply()
     }
+    // Twitch restores its own mute state after an ad or a click in the player: put Regie's mix back.
+    if (ready && update.muted !== undefined && update.muted !== expectMuted()) apply()
   }
   window.addEventListener('message', onMessage)
-
-  // Autoplay with sound can be refused (PLAYBACK_BLOCKED). The player then starts muted, and the sound
-  // only comes on once it really plays.
-  let playing = false
-  const apply = () => {
-    if (!player || !ready) return
-    player.setMuted(wanted <= 0 || !playing)
-    if (wanted > 0) player.setVolume(wanted)
-  }
 
   loadScript(SCRIPT)
     .then(() => {
@@ -107,8 +115,9 @@ export function createTwitchPlayer(context: PlayerContext): Player {
         instance.play()
       })
       instance.addEventListener(Twitch.Player.PLAY, () => events.state('buffering', true))
+      // Ads come from the player's state messages; a Twitch pause is never read as an ad.
       instance.addEventListener(Twitch.Player.PAUSE, () => {
-        events.state('paused', !ourPause)
+        events.state('paused', false)
         ourPause = false
       })
       instance.addEventListener(Twitch.Player.ENDED, () => events.state('ended', true))
@@ -158,6 +167,7 @@ interface TwitchUpdate {
   playback: string
   fps: number
   latency?: number
+  muted?: boolean
 }
 
 /** Reads the `UPDATE_STATE` message the Twitch player iframe posts to its host page. */
@@ -165,12 +175,13 @@ export function readUpdate(data: unknown): TwitchUpdate | null {
   if (!data || typeof data !== 'object') return null
   const message = data as { eventName?: unknown; params?: Record<string, unknown> }
   if (message.eventName !== 'UPDATE_STATE' || !message.params) return null
-  const { playback, stats } = message.params
+  const { playback, stats, muted } = message.params
   if (typeof playback !== 'string') return null
   const video = (stats as { videoStats?: { fps?: unknown; hlsLatencyBroadcaster?: unknown } } | undefined)?.videoStats
   return {
     playback,
     fps: typeof video?.fps === 'number' ? video.fps : 0,
     latency: typeof video?.hlsLatencyBroadcaster === 'number' ? video.hlsLatencyBroadcaster : undefined,
+    muted: typeof muted === 'boolean' ? muted : undefined,
   }
 }

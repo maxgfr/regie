@@ -52,18 +52,27 @@ export function Stage(handle: Handle<{ store: Store }>) {
 
   return () => {
     const { session } = store
-    // During a line check, the monitor being started takes the main slot of a "main + strip" layout.
-    const warming = store.ui.warmup?.id ?? null
-    const focus = warming ?? store.effectiveFocus()
-    const placed = computeLayout({
-      tiles: session.tiles.map((tile) => ({ id: tile.id, aspect: capabilities(tile.source).aspect })),
-      width: width - GAP * 2,
-      height: height - GAP * 2,
-      mode: warming ? 'focus' : session.layout,
-      focusId: focus,
-      gap: GAP,
-      chrome: UMD,
+    const focus = store.effectiveFocus()
+    const layoutTiles = session.tiles.map((tile) => ({ id: tile.id, aspect: capabilities(tile.source).aspect }))
+    const layout = (boostId: string | null) =>
+      computeLayout({
+        tiles: layoutTiles,
+        width: width - GAP * 2,
+        height: height - GAP * 2,
+        mode: session.layout,
+        focusId: focus,
+        boostId,
+        gap: GAP,
+        chrome: UMD,
+      })
+    let placed = layout(null)
+    // A Twitch player only starts, and only counts its ads down, when it is at least 400×300 and visible.
+    // A small one that is starting or in an ad is shown large next to the main monitor until it's done.
+    const boost = store.boostCandidate((id) => {
+      const rect = placed.find((p) => p.id === id)
+      return !rect || rect.w < 400 || rect.h - UMD < 300
     })
+    if (boost) placed = layout(boost)
     const byId = new Map(placed.map((p) => [p.id, p]))
     const mix = store.mix()
     return (

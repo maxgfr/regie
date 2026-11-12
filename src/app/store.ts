@@ -76,6 +76,10 @@ export class Store extends TypedEventTarget<Events> {
     takeover: null as { id: string; until: number } | null,
     /** "Line check": a small Twitch monitor shown large for a moment, because Twitch only autoplays ≥ 400×300. */
     warmup: null as { id: string; since: number } | null,
+    /** The mini control room (picture-in-picture window) is open: it plays the sound, the wall is silent. */
+    miniRegie: false,
+    /** The browser offered to install the app. */
+    installable: false,
     toast: null as string | null,
   }
   chatLog: ChatMessage[] = []
@@ -238,6 +242,7 @@ export class Store extends TypedEventTarget<Events> {
           const runtime = this.runtime.get(id)
           if (!runtime) return
           runtime.state = state
+          if (state === 'playing') this.#applied.delete(id)
           if (state === 'playing') {
             if (!runtime.played && this.ui.warmup?.id === id) setTimeout(() => this.#nextWarmup(id), 1200)
             runtime.played = true
@@ -504,17 +509,37 @@ export class Store extends TypedEventTarget<Events> {
     return this.mix().volumes
   }
 
-  /** The main tile, after an ad on it handed the main monitor over (when ad switching is on). */
+  /** Twitch tiles in an ad, for the notice that explains why they are shown large. */
+  twitchAds(): string[] {
+    return this.session.tiles
+      .filter((tile) => tile.source.platform === 'twitch' && this.runtime.get(tile.id)?.ad.inAd)
+      .map((tile) => tile.id)
+  }
+
+  /** The main tile. An ad never moves it: Twitch only counts an ad down while its player is large and visible. */
   effectiveFocus(): string | null {
-    const { focusId, audioId, adSwitch } = this.session
-    if (!adSwitch || !focusId) return focusId
-    const mix = this.mix()
-    if (mix.covering && focusId === audioId) return mix.onAir
-    return focusId
+    return this.session.focusId
+  }
+
+  /**
+   * The tile to show large for a while, if any: the one in a line check, else a small Twitch tile in an ad.
+   * `small` tells whether a tile is below the size Twitch needs.
+   */
+  boostCandidate(small: (id: string) => boolean): string | null {
+    if (this.ui.warmup && small(this.ui.warmup.id)) return this.ui.warmup.id
+    const inAd = this.session.tiles.find(
+      (tile) => tile.source.platform === 'twitch' && this.runtime.get(tile.id)?.ad.inAd && small(tile.id),
+    )
+    return inAd?.id ?? null
+  }
+
+  setMiniRegie(open: boolean) {
+    this.ui.miniRegie = open
+    this.changed(false)
   }
 
   #applyAudio(immediate = false) {
-    const target = this.ui.soundAllowed ? this.#targetVolumes() : {}
+    const target = this.ui.soundAllowed && !this.ui.miniRegie ? this.#targetVolumes() : {}
     const changed = [...this.players.keys()].some((id) => (this.#applied.get(id) ?? 0) !== (target[id] ?? 0))
     if (!changed) return
     if (this.session.transition === 'mix' && !immediate && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -573,6 +598,8 @@ export class Store extends TypedEventTarget<Events> {
     if (!runtime) return
     const before = runtime.ad.inAd
     runtime.ad = adReducer(runtime.ad, signal, Date.now())
+    // The player may have changed its own sound around an ad: send the mix again rather than trust the cache.
+    if (runtime.ad.inAd !== before) this.#applied.delete(id)
     if (runtime.ad.inAd !== before || render) this.changed(false)
   }
 
@@ -784,8 +811,20 @@ export class Store extends TypedEventTarget<Events> {
       adChanged = true
     }
     if (adChanged) this.changed(false)
+    // Every 5 s, send each player its level again: a click inside a player can change its sound.
+    if (++this.#ticks % 5 === 0 && this.ui.soundAllowed && !this.#fade) {
+      const target = this.ui.miniRegie ? {} : this.#targetVolumes()
+      for (const [id, player] of this.players) {
+        const tile = this.tile(id)
+        if (!tile || !capabilities(tile.source).volume) continue
+        safely(() => player.setVolume(target[id] ?? 0))
+        this.#applied.set(id, target[id] ?? 0)
+      }
+    }
     this.#emit('tick')
   }
+
+  #ticks = 0
 
   // ----- library -----
 

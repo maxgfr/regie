@@ -19,9 +19,12 @@ Built for the evening when a tournament runs on five channels at once: the main 
   - **Manual**: one fader per stream.
   - Switching can be a **cut** or a 600 ms **crossfade**.
   - Hold `Alt` to listen to the stream under the pointer.
-- **Ads.** When the stream on air goes to an ad, the sound moves to another stream, the one with the busiest chat if Regie can tell. If it was on the main monitor, the other stream takes that place too. Everything returns when the ad ends.
-  - On Twitch, Regie reads the player's own state messages.
-  - Elsewhere, Regie watches for a stream whose clock stops while it should be playing. You can also press `A`.
+- **Ads.**
+  - When the stream on air goes to an ad, the sound moves to another stream (the one with the busiest chat if Regie can tell) and comes back when the ad ends.
+  - Ads stay silent.
+  - Twitch only runs an ad while its player is large and visible, after a click in the player. So a small stream in an ad is shown large, next to the main monitor, until the ad ends, and a notice asks for that one click.
+  - On Twitch, ads are read from the player's own state messages. Elsewhere, Regie watches for a stream whose clock stops while it should be playing. You can also press `A`.
+- **Line check.** Twitch won't autoplay a player smaller than 400 × 300. A small Twitch monitor is shown large for a moment until it starts, then goes back to its place.
 - **Delays lined up.**
   - Press `S`, then mark the same in-game moment on each stream.
   - Streams Regie can seek are delayed to match the slowest one: YouTube (live DVR included), every VOD, direct video.
@@ -39,7 +42,13 @@ Built for the evening when a tournament runs on five channels at once: the main 
 - **Keyboard first.**
   - `1`–`9` put a stream on air, `⇧ 1`–`9` put it on the main monitor.
   - `L` changes the layout, `C` shows the chat, `B` opens the library, `F` goes full screen, `M` mutes, `T` switches cut / crossfade, `/` adds a stream, `?` shows help.
-- An installable PWA, in English and French. The screen stays awake while streams play.
+- **Mini control room** (`P`): the stream on air in an always-on-top picture-in-picture window, with keys to switch streams, so a match keeps playing while you use other apps. Chrome and Edge, on a computer.
+- **An installable app (PWA).**
+  - Share a Twitch or YouTube link to Regie from another app (Android) to add it to the wall, even when Regie is already open.
+  - A shortcut opens creator search.
+  - The interface works offline, though the streams need the network.
+  - English and French. The screen stays awake while streams play.
+- **In the background.** Streams keep playing in a background tab or a minimised window. On phones, the system pauses other sites' players when the browser leaves the screen, and no web page can prevent that: keep Regie in front, or use the mini control room on a computer.
 
 ## What a web page can't do
 
@@ -55,8 +64,9 @@ Regie only uses official embeds, so it can only do what each player allows:
 | Dailymotion | mute only (reload) | – | – | |
 | HLS / MP4 link | ✓ | ✓ | – | played with hls.js where HLS isn't native |
 
-- **Ads can't be blocked from a page.** Players are other sites, and Twitch puts its ads inside the video itself. Regie moves the sound and the main monitor away from an ad instead. To block ads, use a browser extension such as [uBlock Origin](https://ublockorigin.com/).
-- **Some Twitch channels ask for a click.** If a channel carries a mature-content warning, Twitch waits for a click on "Start watching" in that player. Twitch also refuses to autoplay a player that is covered, so nothing in Regie is ever drawn over a player.
+- **Ads can't be blocked from a page.** Players are other sites, and Twitch puts its ads inside the video itself. Every site that embeds Twitch's player shows its ads, and the remaining workarounds are extensions, userscripts or proxies. Regie keeps ads silent and takes the sound elsewhere instead. To block ads, use a browser extension such as [uBlock Origin](https://ublockorigin.com/).
+- **Twitch ads wait for a click.** Twitch starts its ads paused. A page can't click inside another site's player, and the player API's `play()` doesn't start an ad either: one click on play in that player does.
+- **Some Twitch channels ask for a click too.** If a channel carries a mature-content warning, Twitch waits for a click on "Start watching" in that player. Twitch also refuses to autoplay a player that is covered, so nothing in Regie is ever drawn over a player.
 
 ## Privacy
 

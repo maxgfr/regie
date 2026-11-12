@@ -1,5 +1,5 @@
 // Offline shell: the page and its assets are cached; streams always come from the network.
-const CACHE = 'regie-v1'
+const CACHE = 'regie-v2'
 
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (event) => {

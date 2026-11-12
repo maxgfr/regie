@@ -117,7 +117,7 @@ export const en = {
   'help.focusNote': 'After a click inside a player, Regie takes the keyboard back so these keys keep working.',
   'help.ads': 'Ads',
   'help.adsText':
-    'A web page can’t block ads in other sites’ players, and Twitch puts its ads inside the video itself. Regie notices when a stream stops playing, or when you press A, and moves the sound to another stream until it comes back. To block ads, install a browser extension such as uBlock Origin.',
+    'A web page can’t block ads in other sites’ players, and Twitch puts its ads inside the video itself. Twitch also only counts an ad down while its player is large and visible, so Regie never hides it: a small stream in an ad is shown large, silent, next to the main monitor until the ad ends, and the sound moves to another stream meanwhile. Keep the tab visible. To block ads, install a browser extension such as uBlock Origin.',
   'help.platforms': 'What each platform allows',
   'help.platformsText':
     'Twitch: volume, VOD seek, live latency. YouTube: volume and seek, live included. TikTok: mute and seek, videos only (TikTok LIVE opens in its own window). Kick and Dailymotion: mute only, by reloading the player. Vimeo: volume.',
@@ -179,6 +179,15 @@ export const en = {
   'toast.prefsReset': 'Preferences reset.',
   'help.k.library': 'Library: find channels, favourites, setups',
   'warmup.text': 'Line check {done}/{total}: starting {name} on the main monitor (Twitch only autoplays large players)',
+  'console.pip': 'Mini control room: the stream on air in an always-on-top window',
+  'console.install': 'Install Regie as an app',
+  'help.k.pip': 'Mini control room (always on top, keeps playing while you use other apps)',
+  'toast.noPip': 'This browser can’t open a page in picture-in-picture (Chrome and Edge on a computer can).',
+  'ad.notice':
+    '{name} is in an ad: click play in its player to run it (Twitch waits for a click). It stays large and silent until the ad ends',
+  'help.background': 'In the background',
+  'help.backgroundText':
+    'Streams keep playing in a background tab or a minimised window. To watch while using other apps, open the mini control room (P): an always-on-top window with the stream on air. On phones, the system pauses other sites’ players when the browser leaves the screen: no web page can prevent that.',
   'drop.hint': 'Drop the link to add the stream',
 } as const
 

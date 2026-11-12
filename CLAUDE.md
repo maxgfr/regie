@@ -17,6 +17,7 @@ Static multi-stream viewer deployed on GitHub Pages. Read `PRODUCT.md` (product 
 - **Never draw anything over a player.** Twitch refuses to autoplay, or pauses, a covered player. That rules out overlays, sheets and toasts above the wall.
   - The tally is a ring outside the monitor. States go in the label strip (UMD).
   - Side panels dock in the right column. Notices sit between the wall and the console.
+- **Twitch needs 400×300 and visibility** to autoplay and to run ads. `computeLayout({ boostId })` shows one small tile large next to the main tile, for a line check (`store.warmUp`) or for an ad. Never move the main tile away from an ad: a hidden ad never ends.
 - **Mount a player only once its tile has a real size** (`TileView` waits for a rect). A player started hidden or at 0×0 doesn't autoplay.
 - **Third-party calls must never break the room.** Wrap player calls with `safely()`, and have directory and title fetches return `null`/`[]` on failure.
 - **Anonymous only:** no account, OAuth app or API key. Twitch GQL uses the public web client id and is read-only.

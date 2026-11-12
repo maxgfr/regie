@@ -3,6 +3,7 @@ import { createRoot } from 'remix/component'
 import { Store } from './app/store.ts'
 import { locale } from './i18n/index.ts'
 import { App } from './ui/App.tsx'
+import { setupPwa } from './ui/pwa.ts'
 
 document.documentElement.lang = locale
 
@@ -14,6 +15,7 @@ for (const [rel, href, type] of [
   ['apple-touch-icon', './icon-192.png', ''],
   ['manifest', './manifest.webmanifest', ''],
 ] as const) {
+  if (document.querySelector(`link[rel="${rel}"]`)) continue
   const link = document.createElement('link')
   link.rel = rel
   link.href = href
@@ -27,6 +29,8 @@ store.start()
 if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
   ;(window as unknown as { regie: Store }).regie = store
 }
+
+setupPwa(store)
 
 const container = document.getElementById('app')
 if (container) createRoot(container).render(<App store={store} />)

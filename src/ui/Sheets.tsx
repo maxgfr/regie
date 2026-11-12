@@ -103,6 +103,7 @@ const KEYS: [string, MessageKey][] = [
   ['Alt', 'help.k.listen'],
   ['/', 'help.k.add'],
   ['B', 'help.k.library'],
+  ['P', 'help.k.pip'],
   ['?', 'help.k.help'],
 ]
 
@@ -134,6 +135,8 @@ export function HelpSheet(handle: Handle<{ store: Store }>) {
       <p class="note">{t('help.focusNote')}</p>
       <h3>{t('help.ads')}</h3>
       <p>{t('help.adsText')}</p>
+      <h3>{t('help.background')}</h3>
+      <p>{t('help.backgroundText')}</p>
       <h3>{t('help.platforms')}</h3>
       <p>{t('help.platformsText')}</p>
       <h3>{t('help.language')}</h3>

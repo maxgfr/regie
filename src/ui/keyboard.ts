@@ -1,4 +1,5 @@
 import type { Store } from '../app/store.ts'
+import { openMiniRegie } from './pip.ts'
 
 const typing = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))
@@ -90,6 +91,9 @@ export function installKeyboard(store: Store, input: () => HTMLInputElement | nu
           break
         case 'b':
           store.openLibrary()
+          break
+        case 'p':
+          if (tiles.length) openMiniRegie(store)
           break
         default:
           return

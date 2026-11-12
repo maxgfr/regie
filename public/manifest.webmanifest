@@ -1,15 +1,33 @@
 {
+  "id": "./",
   "name": "Regie",
   "short_name": "Regie",
   "description": "A control room for watching several streams at once.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
   "background_color": "#0b0c0d",
   "theme_color": "#0b0c0d",
+  "categories": ["entertainment", "sports", "video"],
   "icons": [
     { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" }
+  ],
+  "launch_handler": { "client_mode": ["focus-existing", "auto"] },
+  "share_target": {
+    "action": "./",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  },
+  "shortcuts": [
+    {
+      "name": "Find a creator",
+      "short_name": "Find",
+      "url": "./?library=search",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }

@@ -106,6 +106,13 @@ describe('ads', () => {
     expect(adReducer(initialAdState(0), { type: 'paused', byUser: false }, 1).inAd).toBe(true)
   })
 
+  test('a pause does not end an ad the player reported', () => {
+    let state = adReducer(initialAdState(0), { type: 'hint', on: true }, 0)
+    state = adReducer(state, { type: 'paused', byUser: true }, 10)
+    expect(state.inAd).toBe(true)
+    expect(adReducer(state, { type: 'hint', on: false }, 20).inAd).toBe(false)
+  })
+
   test('a manual mark holds until removed or timed out', () => {
     let state = adReducer(initialAdState(0), { type: 'manual', on: true }, 0)
     state = adReducer(state, { type: 'progress', time: 5 }, 100)

@@ -1,4 +1,4 @@
-import { Power, Timer, Volume2 } from 'lucide'
+import { Megaphone, Power, Timer, Volume2 } from 'lucide'
 import type { Handle } from 'remix/component'
 import { css, on, ref } from 'remix/component'
 import type { Store } from '../app/store.ts'
@@ -74,6 +74,22 @@ const warmupStyle = css({
   background: '#111315',
   borderTop: '1px solid var(--pvw)',
   color: 'var(--pvw)',
+  fontFamily: 'var(--font-label)',
+  fontWeight: 600,
+  fontSize: '14px',
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+})
+
+const adNoticeStyle = css({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '8px',
+  padding: '6px 14px',
+  background: '#111315',
+  borderTop: '1px solid var(--amber)',
+  color: 'var(--amber)',
   fontFamily: 'var(--font-label)',
   fontWeight: 600,
   fontSize: '14px',
@@ -227,6 +243,12 @@ export function App(handle: Handle<{ store: Store }>) {
                 done: store.warmupProgress().done,
                 total: store.warmupProgress().total,
               })}
+            </div>
+          )}
+          {!ui.warmup && store.twitchAds()[0] && (
+            <div role="status" mix={adNoticeStyle}>
+              <Icon icon={Megaphone} size={16} />
+              {t('ad.notice', { name: store.label(store.twitchAds()[0] as string) })}
             </div>
           )}
           {ui.syncOpen && <SyncBar store={store} />}

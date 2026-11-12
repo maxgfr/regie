@@ -39,7 +39,10 @@ export function adReducer(state: AdState, signal: AdSignal, now: number): AdStat
       return { ...state, inAd: signal.on, since: now, source: signal.on ? 'hint' : null }
     case 'stall':
     case 'paused':
-      if (signal.type === 'paused' && signal.byUser) return { ...state, inAd: false, source: null }
+      // A pause by the user ends a guessed ad, but not one the player itself reported.
+      if (signal.type === 'paused' && signal.byUser) {
+        return state.source === 'hint' || state.source === 'manual' ? state : { ...state, inAd: false, source: null }
+      }
       if (state.inAd) return state
       return { ...state, inAd: true, since: now, source: 'stall' }
     case 'playing':
