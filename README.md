@@ -119,4 +119,4 @@ Automation:
 
 ## License
 
-MIT
+[MIT](LICENSE)
