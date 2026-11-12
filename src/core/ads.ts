@@ -65,31 +65,59 @@ export function adTick(state: AdState, now: number, playing: boolean): AdState {
   return state
 }
 
-export const RELOAD_LIMIT = 2
-export const RELOAD_WINDOW_MS = 5 * 60_000
-
 export const BLOCKED_AFTER_MS = 12_000
 
 /**
  * A Twitch player that Regie already asked to play again and that still never started is usually refusing
  * because of the viewer's own ad blocker: Twitch detects blockers and shows an error instead of the
  * stream. The player iframe is cross-origin, so Regie cannot read that error screen — this is a timing
- * heuristic (mounted, retried, still not played, not offline), not a certainty. `retried` means a `play()`
- * was already sent to a player that didn't start on its own.
+ * heuristic (given its chance, retried, still not played, not offline), not a certainty. `since` is when
+ * the player got its chance to start: mounted at a size Twitch accepts, or its turn in the line check.
+ * `retried` means a `play()` was already sent to a player that didn't start on its own.
  */
 export function adblockSuspect(
-  input: { mountedAt?: number; played?: boolean; retried?: boolean; offline?: boolean },
+  input: { since?: number; played?: boolean; retried?: boolean; offline?: boolean },
   now: number,
 ): boolean {
-  if (input.mountedAt === undefined || input.played || !input.retried || input.offline) return false
-  return now - input.mountedAt > BLOCKED_AFTER_MS
+  if (input.since === undefined || input.played || !input.retried || input.offline) return false
+  return now - input.since > BLOCKED_AFTER_MS
 }
 
 /**
- * Whether to reload a player that just went to an ad. Reloading sometimes skips the ad, but Twitch often
- * serves it again: at most two tries per stream within five minutes, so a stubborn ad never turns into a
- * reload loop. `history` holds the times of the previous reloads.
+ * Reloading a Twitch player in an ad sometimes comes back without it, but it restarts the stream, and a fresh
+ * player often opens on a pre-roll instead. So Regie only reloads when it is likely to pay off:
+ *
+ * - the ad is confirmed: reported for `AD_CONFIRM_MS` (a false signal never reloads a player);
+ * - it is a mid-roll: the player had shown the stream for `PREROLL_MS` before (Twitch also runs its
+ *   "preparing your stream" pre-roll a few seconds after the start; reloading one only restarts it);
+ * - not twice within `RELOAD_GAP_MS`;
+ * - the last reload for this stream worked: when the fresh player opened on an ad again, reloading
+ *   doesn't skip ads on that stream for now, and Regie lets them play (silent, covered) for `RELOAD_FAILED_MS`.
  */
-export function shouldReload(history: number[], now: number): boolean {
-  return history.filter((at) => now - at < RELOAD_WINDOW_MS).length < RELOAD_LIMIT
+export const AD_CONFIRM_MS = 4_000
+export const PREROLL_MS = 30_000
+export const RELOAD_GAP_MS = 5 * 60_000
+export const RELOAD_FAILED_MS = 15 * 60_000
+
+export interface ReloadMemory {
+  /** Last reload for an ad. */
+  at?: number
+  /** Last time a reload led straight to another ad. */
+  failedAt?: number
+}
+
+/** `watchedAt`: when the player first showed the stream itself, since it was mounted. */
+export function shouldReload(memory: ReloadMemory, watchedAt: number | undefined, now: number): boolean {
+  if (watchedAt === undefined || now - watchedAt < PREROLL_MS + AD_CONFIRM_MS) return false
+  if (memory.failedAt !== undefined && now - memory.failedAt < RELOAD_FAILED_MS) return false
+  return memory.at === undefined || now - memory.at >= RELOAD_GAP_MS
+}
+
+/**
+ * An ad just started. If the player was reloaded for an ad and hasn't shown the stream since, the reload
+ * didn't skip anything: remember it so the next ads on this stream simply play.
+ */
+export function noteAd(memory: ReloadMemory, watched: boolean, now: number): ReloadMemory {
+  if (memory.at === undefined || watched || now - memory.at > RELOAD_GAP_MS) return memory
+  return { ...memory, failedAt: now }
 }

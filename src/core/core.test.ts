@@ -1,11 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  AD_CONFIRM_MS,
   adblockSuspect,
   adReducer,
   adTick,
   BLOCKED_AFTER_MS,
   initialAdState,
-  RELOAD_WINDOW_MS,
+  noteAd,
+  PREROLL_MS,
+  RELOAD_FAILED_MS,
+  RELOAD_GAP_MS,
   STALL_MS,
   shouldReload,
 } from './ads.ts'
@@ -122,11 +126,25 @@ describe('ads', () => {
     expect(adReducer(state, { type: 'hint', on: false }, 20).inAd).toBe(false)
   })
 
-  test('a player in an ad is reloaded at most twice in five minutes', () => {
-    expect(shouldReload([], 0)).toBe(true)
-    expect(shouldReload([1000], 2000)).toBe(true)
-    expect(shouldReload([1000, 2000], 3000)).toBe(false)
-    expect(shouldReload([1000, 2000], 2000 + RELOAD_WINDOW_MS)).toBe(true)
+  test('only a mid-roll is reloaded, at most once in five minutes', () => {
+    const late = PREROLL_MS + AD_CONFIRM_MS
+    // A pre-roll: the player never showed the stream, or only for a few seconds.
+    expect(shouldReload({}, undefined, late)).toBe(false)
+    expect(shouldReload({}, 0, 5000)).toBe(false)
+    expect(shouldReload({}, 0, late)).toBe(true)
+    expect(shouldReload({ at: late }, 0, late + 1000)).toBe(false)
+    expect(shouldReload({ at: late }, 0, late + RELOAD_GAP_MS)).toBe(true)
+  })
+
+  test('a reload that opens on another ad stops the reloads for a while', () => {
+    // The fresh player went straight to an ad, before showing the stream.
+    const failed = noteAd({ at: 1000 }, false, 5000)
+    expect(failed.failedAt).toBe(5000)
+    expect(shouldReload(failed, 0, 1000 + RELOAD_GAP_MS)).toBe(false)
+    expect(shouldReload(failed, 0, 5000 + RELOAD_FAILED_MS)).toBe(true)
+    // The stream came back first: the reload worked, nothing to remember.
+    expect(noteAd({ at: 1000 }, true, 60_000).failedAt).toBeUndefined()
+    expect(noteAd({}, false, 5000).failedAt).toBeUndefined()
   })
 
   test('a manual mark holds until removed or timed out', () => {
@@ -137,12 +155,12 @@ describe('ads', () => {
   })
 
   test('a player that was asked to play and still never started is suspected of being ad-blocked', () => {
-    expect(adblockSuspect({ mountedAt: 0, retried: true }, BLOCKED_AFTER_MS + 1)).toBe(true)
+    expect(adblockSuspect({ since: 0, retried: true }, BLOCKED_AFTER_MS + 1)).toBe(true)
     // Not yet: no play() retry sent, or still playing, or offline, or too soon.
-    expect(adblockSuspect({ mountedAt: 0, retried: false }, BLOCKED_AFTER_MS + 1)).toBe(false)
-    expect(adblockSuspect({ mountedAt: 0, played: true, retried: true }, BLOCKED_AFTER_MS + 1)).toBe(false)
-    expect(adblockSuspect({ mountedAt: 0, retried: true, offline: true }, BLOCKED_AFTER_MS + 1)).toBe(false)
-    expect(adblockSuspect({ mountedAt: 0, retried: true }, BLOCKED_AFTER_MS)).toBe(false)
+    expect(adblockSuspect({ since: 0, retried: false }, BLOCKED_AFTER_MS + 1)).toBe(false)
+    expect(adblockSuspect({ since: 0, played: true, retried: true }, BLOCKED_AFTER_MS + 1)).toBe(false)
+    expect(adblockSuspect({ since: 0, retried: true, offline: true }, BLOCKED_AFTER_MS + 1)).toBe(false)
+    expect(adblockSuspect({ since: 0, retried: true }, BLOCKED_AFTER_MS)).toBe(false)
     expect(adblockSuspect({}, BLOCKED_AFTER_MS + 1)).toBe(false)
   })
 })

@@ -42,7 +42,7 @@ Dark comes from the use scene: video watched for hours, often at night. The chro
 
 ## Motion
 
-- One authored moment: when the layout changes, monitors glide to their new position (`transform`/size, 380 ms, exponential ease-out). Iframes never move in the DOM.
+- One authored moment: when the layout changes, monitors glide to their new position (`transform` only, 380 ms, exponential ease-out); their size is a cut, so no player is resized on every frame. Iframes never move in the DOM.
 - A cut is instant. A **MIX** transition crossfades the audio over 600 ms, and the PGM key fills from left to right over the same time.
 - The tally appears without fading (like real tally relays). `prefers-reduced-motion` turns every glide into an instant cut.
 

@@ -122,28 +122,51 @@ function twitchUpdate(page: Page, index: number, params: Record<string, unknown>
   )
 }
 
-test('a Twitch player that reports an ad gets the badge, the sound moves, and one reload', async ({ page }) => {
+/** Mounts two fake Twitch players; `play` lists the ones that already showed the stream. */
+async function twitchWall(page: Page, play: number[]) {
   await page.route('https://player.twitch.tv/js/embed/v1.js', (route) =>
     route.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE_TWITCH }),
   )
   await page.goto('/#s=tw.alpha|tw.beta&l=focus')
   await expect(page.locator('[data-tile]')).toHaveCount(2)
   await page.waitForFunction(() => (window as unknown as { __players?: unknown[] }).__players?.length === 2)
-  await page.evaluate(() => {
-    for (const player of (window as unknown as { __players: FakePlayer[] }).__players) {
+  await page.evaluate((play) => {
+    const players = (window as unknown as { __players: FakePlayer[] }).__players
+    players.forEach((player, index) => {
       player.emit('ready')
-      player.emit('playing')
-    }
-  })
-  // Two UPDATE_STATE messages with playback Idle but frames flowing: the only ad signal an embed gets.
-  const ad = { playback: 'Idle', stats: { videoStats: { fps: 30 } }, muted: true }
-  await twitchUpdate(page, 0, ad)
-  await twitchUpdate(page, 0, ad)
+      if (play.includes(index)) player.emit('playing')
+    })
+  }, play)
+}
+
+const players = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __players?: unknown[] }).__players?.length ?? 0)
+
+/** "Buffering" with tens of seconds buffered, for more than three seconds: how a Twitch ad shows up. */
+async function twitchAd(page: Page, index: number) {
+  const ad = { playback: 'Buffering', stats: { videoStats: { fps: 7, bufferSize: 43.2 } }, muted: true }
+  await twitchUpdate(page, index, ad)
+  await page.waitForTimeout(3200)
+  await twitchUpdate(page, index, ad)
+}
+
+test('a Twitch player that reports an ad gets the badge, the sound moves, and one reload', async ({ page }) => {
+  await page.clock.install()
+  await twitchWall(page, [0, 1])
+  // Both have shown their stream for a while: the next ad is a mid-roll.
+  await page.clock.fastForward(40_000)
+  // A paused live player keeps reporting frames for a few seconds: that is not an ad.
+  const paused = { playback: 'Idle', stats: { videoStats: { fps: 31, bufferSize: 130 } }, muted: true }
+  await twitchUpdate(page, 0, paused)
+  await page.waitForTimeout(3200)
+  await twitchUpdate(page, 0, paused)
+  await expect(page.locator('[data-tile]').first()).toHaveAttribute('data-ad', 'false')
+  await twitchAd(page, 0)
   await expect(page.locator('[data-tile]').first()).toHaveAttribute('data-ad', 'true')
   await expect(page.locator('[data-tile]').nth(1)).toHaveAttribute('data-tally', 'pgm')
-  // adReload is on by default: the player is reloaded once, after the ad settles.
+  // adReload is on by default: a mid-roll is reloaded once it is confirmed.
   await page.waitForFunction(() => (window as unknown as { __players?: unknown[] }).__players?.length === 3, null, {
-    timeout: 6000,
+    timeout: 8000,
   })
   // The fresh player reports Playing: the ad is over.
   await page.evaluate(() => {
@@ -153,6 +176,15 @@ test('a Twitch player that reports an ad gets the badge, the sound moves, and on
   })
   await twitchUpdate(page, 2, { playback: 'Playing', stats: { videoStats: { fps: 60 } }, muted: false, volume: 1 })
   await expect(page.locator('[data-tile]').first()).toHaveAttribute('data-ad', 'false')
+})
+
+test('a pre-roll ad is not reloaded: a fresh player would only start it again', async ({ page }) => {
+  // The first player never showed the stream: its ad is a pre-roll.
+  await twitchWall(page, [1])
+  await twitchAd(page, 0)
+  await expect(page.locator('[data-tile]').first()).toHaveAttribute('data-ad', 'true')
+  await page.waitForTimeout(5000)
+  expect(await players(page)).toBe(2)
 })
 
 test('sync mode marks streams from the label strip', async ({ page }) => {

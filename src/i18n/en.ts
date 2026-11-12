@@ -189,7 +189,7 @@ export const en = {
   'ad.notice':
     '{name} is paused or in an ad: click play in its player (Twitch waits for a click). It stays large and silent until it plays',
   'ad.blockedNotice':
-    '{name} won’t start: an ad blocker is probably on. Twitch detects blockers and refuses to play with them — disable the extension for this site, or click play in the player',
+    '{name} won’t start on its own: click play in the player. If it still won’t play, an ad blocker is the likely cause — Twitch refuses to play with one, disable it for this site',
   'help.background': 'In the background',
   'help.backgroundText':
     'Streams keep playing in a background tab or a minimised window. To watch while using other apps, open the mini control room (P): an always-on-top window with the stream on air. On phones, the system pauses other sites’ players when the browser leaves the screen: no web page can prevent that.',
@@ -204,7 +204,7 @@ export const en = {
   'tile.badgeOffline': 'Offline',
   'help.adReload': 'Reload a player that goes to an ad',
   'help.adReloadHint':
-    'A fresh Twitch player sometimes comes back without the ad. Two tries per stream every five minutes at most, then the ad plays.',
+    'Only once the ad is confirmed and only for a mid-roll: a fresh player sometimes comes back without it. Once every five minutes at most, and if the fresh player opens on an ad again, the ads of that stream simply play for a while.',
   'drop.hint': 'Drop the link to add the stream',
 } as const
 

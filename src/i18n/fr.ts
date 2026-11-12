@@ -195,7 +195,7 @@ export const fr: Record<MessageKey, string> = {
   'ad.notice':
     '{name} est en pause ou en pub : cliquez sur lecture dans son player (Twitch attend un clic). Il reste en grand et sans le son jusqu’à la reprise',
   'ad.blockedNotice':
-    '{name} ne démarre pas : un bloqueur de pub est probablement actif. Twitch détecte les bloqueurs et refuse de jouer avec — désactivez l’extension pour ce site, ou cliquez sur lecture dans le lecteur',
+    '{name} ne démarre pas tout seul : cliquez sur lecture dans le lecteur. S’il refuse toujours, c’est sans doute un bloqueur de pub — Twitch refuse de jouer avec, désactivez-le pour ce site',
   'help.background': 'En arrière-plan',
   'help.backgroundText':
     'Les streams continuent dans un onglet en arrière-plan ou une fenêtre réduite. Pour regarder en utilisant d’autres apps, ouvrez la mini-régie (P) : une fenêtre toujours au premier plan avec le stream à l’antenne. Sur téléphone, le système met en pause les players des autres sites quand le navigateur quitte l’écran : aucune page web ne peut l’empêcher.',
@@ -212,6 +212,6 @@ export const fr: Record<MessageKey, string> = {
   'tile.badgeOffline': 'Hors ligne',
   'help.adReload': 'Recharger un player qui passe en pub',
   'help.adReloadHint':
-    'Un player Twitch rechargé revient parfois sans la pub. Deux essais par stream toutes les cinq minutes au plus, ensuite la pub passe.',
+    'Seulement une fois la pub confirmée, et seulement en cours de stream : un player neuf revient parfois sans. Une fois toutes les cinq minutes au plus, et si le player neuf retombe sur une pub, les pubs de ce stream passent normalement pendant un moment.',
   'drop.hint': 'Lâchez le lien pour ajouter le stream',
 }

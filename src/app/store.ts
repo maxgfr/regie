@@ -1,13 +1,15 @@
 import { TypedEventTarget } from 'remix/component'
 import { type ChatMessage, TwitchChat } from '../chat/irc.ts'
 import {
+  AD_CONFIRM_MS,
   type AdSignal,
   type AdState,
   adblockSuspect,
   adReducer,
   adTick,
   initialAdState,
-  RELOAD_WINDOW_MS,
+  noteAd,
+  type ReloadMemory,
   shouldReload,
 } from '../core/ads.ts'
 import { mixAudio } from '../core/audio.ts'
@@ -38,8 +40,16 @@ export interface TileRuntime {
   latency?: number
   /** The player has played at least once: before that, a pause is a refused autoplay, not an ad. */
   played?: boolean
-  /** When the player was mounted, to tell a slow start from a player waiting for a click. */
+  /** When the player was mounted. */
   mountedAt?: number
+  /**
+   * When the player got its chance to start: mounted at a size it can autoplay at, or its turn in the line
+   * check. Unset while it waits in the line-check queue. The "click to start" and "ad blocker" clocks run
+   * from here, so a monitor still waiting for its turn isn't blamed for not starting.
+   */
+  chanceAt?: number
+  /** When the player first showed the stream itself (not only an ad) since it was mounted. */
+  watchedAt?: number
   /** A `play()` was already sent to a player that didn't start on its own. */
   retried?: boolean
   /** Title from the platform's oEmbed, when it has one. */
@@ -97,6 +107,8 @@ export class Store extends TypedEventTarget<Events> {
   #pending: (ChatMessage & { release: number })[] = []
   #chat = new TwitchChat()
   #applied = new Map<string, number>()
+  /** Players whose sound must be sent again as it is (they may have changed it themselves around an ad). */
+  #resend = new Set<string>()
   #fade: { from: Map<string, number>; to: Record<string, number>; start: number } | null = null
   #warmQueue: string[] = []
   #lastHash = ''
@@ -241,6 +253,8 @@ export class Store extends TypedEventTarget<Events> {
   loadHash(hash: string) {
     for (const id of [...this.players.keys()]) this.#detach(id)
     this.#containers.clear()
+    this.#fits.clear()
+    this.#unfitted.clear()
     this.#reloads.clear()
     this.#blocked.clear()
     this.#warmQueue = []
@@ -312,8 +326,12 @@ export class Store extends TypedEventTarget<Events> {
   /** Mounts the player of a tile into its screen element. Called once per tile by the stage. */
   /** Where each player is mounted, to mount it again on a reload. */
   #containers = new Map<string, HTMLElement>()
-  /** When each tile's player was reloaded for an ad. */
-  #reloads = new Map<string, number[]>()
+  /** What each tile's ad reloads did, to only reload when it pays off. */
+  #reloads = new Map<string, ReloadMemory>()
+  /** Tiles shown below the size Twitch needs in the current layout, boosts aside (kept by the stage). */
+  #small = new Set<string>()
+  /** Pending reloads, waiting for an ad to be confirmed. */
+  #adTimers = new Map<string, ReturnType<typeof setTimeout>>()
   /** Tiles currently suspected of being blocked by the viewer's ad blocker (to re-render on change). */
   #blocked = new Set<string>()
 
@@ -331,10 +349,11 @@ export class Store extends TypedEventTarget<Events> {
           const runtime = this.runtime.get(id)
           if (!runtime) return
           runtime.state = state
-          if (state === 'playing') this.#applied.delete(id)
           if (state === 'playing') {
+            this.#resend.add(id)
             if (!runtime.played && this.ui.warmup?.id === id) setTimeout(() => this.#nextWarmup(id), 1200)
             runtime.played = true
+            runtime.watchedAt ??= Date.now()
             this.#adSignal(id, { type: 'playing' })
           } else if (state === 'paused' && runtime.played) this.#adSignal(id, { type: 'paused', byUser: !byPlayer })
           else this.#emit('change')
@@ -352,8 +371,12 @@ export class Store extends TypedEventTarget<Events> {
             runtime.played = true
             if (this.ui.warmup?.id === id) setTimeout(() => this.#nextWarmup(id), 1200)
           }
+          if (on) {
+            const watched = runtime?.watchedAt !== undefined
+            this.#reloads.set(id, noteAd(this.#reloads.get(id) ?? {}, watched, Date.now()))
+          }
           this.#adSignal(id, { type: 'hint', on })
-          if (on) this.#reloadForAd(id)
+          this.#watchAd(id, on)
         },
       },
     })
@@ -361,7 +384,15 @@ export class Store extends TypedEventTarget<Events> {
       this.players.set(id, player)
       this.#applied.set(id, 0)
       const runtime = this.runtime.get(id)
-      if (runtime) runtime.mountedAt = Date.now()
+      if (runtime) {
+        runtime.mountedAt = Date.now()
+        runtime.chanceAt = runtime.mountedAt
+      }
+      // A player mounted again (reload) starts on automatic quality: give it its size.
+      if (this.#fits.has(id)) {
+        this.#unfitted.add(id)
+        if (!this.ui.warmup && !this.#warmQueue.length) this.#applyFits()
+      }
     }
   }
 
@@ -370,10 +401,20 @@ export class Store extends TypedEventTarget<Events> {
    * made smaller. So each small Twitch monitor is shown on the main monitor for a moment until it plays: a
    * line check, as when a control room powers up its monitors.
    */
+  /** The stage tells which tiles are too small for Twitch in its layout (boosts aside). */
+  setSmallTiles(ids: Set<string>) {
+    this.#small = ids
+  }
+
+  isSmall(id: string): boolean {
+    return this.#small.has(id)
+  }
+
   warmUp(id: string) {
     const runtime = this.runtime.get(id)
     if (!runtime || runtime.played || this.#warmQueue.includes(id) || this.ui.warmup?.id === id) return
     this.#warmQueue.push(id)
+    runtime.chanceAt = undefined
     if (!this.ui.warmup) this.#nextWarmup()
   }
 
@@ -395,11 +436,11 @@ export class Store extends TypedEventTarget<Events> {
       const runtime = this.runtime.get(tile.id)
       return (
         tile.source.platform === 'twitch' &&
-        !this.#warmQueue.includes(tile.id) &&
         tile.id !== finished &&
-        runtime?.mountedAt !== undefined &&
+        tile.id !== this.ui.warmup?.id &&
+        runtime?.chanceAt !== undefined &&
         !runtime.played &&
-        now - runtime.mountedAt < 7000
+        now - runtime.chanceAt < 7000
       )
     })
     if (starting) {
@@ -414,7 +455,10 @@ export class Store extends TypedEventTarget<Events> {
       if (runtime && !runtime.played && this.tile(next)) break
       next = this.#warmQueue.shift()
     }
-    this.ui.warmup = next ? { id: next, since: Date.now() } : null
+    this.ui.warmup = next ? { id: next, since: now } : null
+    if (!next) this.#applyFits()
+    const turn = next ? this.runtime.get(next) : undefined
+    if (turn) turn.chanceAt = now
     if (!next) this.#warmTotal = 0
     this.#emit('change')
   }
@@ -444,18 +488,26 @@ export class Store extends TypedEventTarget<Events> {
   }
 
   /**
-   * A Twitch player went to an ad: reload just that player (the rest of the wall keeps playing). A fresh
-   * player sometimes comes back without the ad; the tries are limited so a stubborn ad can't loop.
+   * A Twitch player went to an ad: once the ad is confirmed, reload just that player (the rest of the wall
+   * keeps playing), if that is likely to skip it (see `shouldReload`). An ad that ends first cancels it.
    */
-  #reloadForAd(id: string) {
-    const tile = this.tile(id)
-    if (!this.session.adReload || tile?.source.platform !== 'twitch') return
-    const now = Date.now()
-    const history = (this.#reloads.get(id) ?? []).filter((at) => now - at < RELOAD_WINDOW_MS)
-    if (!shouldReload(history, now)) return
-    this.#reloads.set(id, [...history, now])
-    // Leave the ad a moment to settle, so the reload doesn't race the player's own ad request.
-    setTimeout(() => this.reloadPlayer(id), 1500)
+  #watchAd(id: string, on: boolean) {
+    clearTimeout(this.#adTimers.get(id))
+    this.#adTimers.delete(id)
+    if (!on || !this.session.adReload || this.tile(id)?.source.platform !== 'twitch') return
+    this.#adTimers.set(
+      id,
+      setTimeout(() => {
+        this.#adTimers.delete(id)
+        const runtime = this.runtime.get(id)
+        const memory = this.#reloads.get(id) ?? {}
+        const now = Date.now()
+        if (!this.session.adReload || runtime?.ad.source !== 'hint') return
+        if (!shouldReload(memory, runtime.watchedAt, now)) return
+        this.#reloads.set(id, { ...memory, at: now })
+        this.reloadPlayer(id)
+      }, AD_CONFIRM_MS),
+    )
   }
 
   /** Mounts a tile's player again, in place. */
@@ -466,11 +518,12 @@ export class Store extends TypedEventTarget<Events> {
     this.#detach(id)
     runtime.ad = initialAdState(Date.now())
     runtime.played = false
+    runtime.watchedAt = undefined
     runtime.retried = false
     runtime.state = 'loading'
     this.attach(id, container)
     // A small monitor needs its line check again to start (Twitch only autoplays large players).
-    this.warmUp(id)
+    if (this.tile(id)?.source.platform === 'twitch' && this.#small.has(id)) this.warmUp(id)
     this.changed(false)
   }
 
@@ -479,10 +532,27 @@ export class Store extends TypedEventTarget<Events> {
     this.changed()
   }
 
-  /** Matches a player's stream quality to the size it is shown at (Twitch). */
+  /** The size each tile is shown at, and the tiles whose player hasn't been told yet. */
+  #fits = new Map<string, { height: number; large: boolean }>()
+  #unfitted = new Set<string>()
+
+  /**
+   * Matches a player's stream quality to the size it is shown at (Twitch). Held during line checks: each
+   * one reshuffles the wall, and every quality change makes a player rebuffer.
+   */
   fitPlayer(id: string, displayHeight: number, large: boolean) {
-    const player = this.players.get(id)
-    if (player?.fit) safely(() => player.fit?.(displayHeight, large))
+    this.#fits.set(id, { height: displayHeight, large })
+    this.#unfitted.add(id)
+    if (!this.ui.warmup && !this.#warmQueue.length) this.#applyFits()
+  }
+
+  #applyFits() {
+    for (const id of this.#unfitted) {
+      const player = this.players.get(id)
+      const fit = this.#fits.get(id)
+      if (player?.fit && fit) safely(() => player.fit?.(fit.height, fit.large))
+    }
+    this.#unfitted.clear()
   }
 
   /** Players that never started (autoplay refused) get another go on the next user gesture. */
@@ -496,12 +566,17 @@ export class Store extends TypedEventTarget<Events> {
   #forget(id: string) {
     this.#containers.delete(id)
     this.#reloads.delete(id)
+    this.#fits.delete(id)
+    this.#unfitted.delete(id)
   }
 
   #detach(id: string) {
     this.players.get(id)?.destroy()
     this.players.delete(id)
     this.#applied.delete(id)
+    this.#resend.delete(id)
+    clearTimeout(this.#adTimers.get(id))
+    this.#adTimers.delete(id)
   }
 
   // ----- sources -----
@@ -548,6 +623,8 @@ export class Store extends TypedEventTarget<Events> {
   clear() {
     for (const id of [...this.players.keys()]) this.#detach(id)
     this.#containers.clear()
+    this.#fits.clear()
+    this.#unfitted.clear()
     this.#reloads.clear()
     this.#blocked.clear()
     this.#warmQueue = []
@@ -706,6 +783,16 @@ export class Store extends TypedEventTarget<Events> {
 
   #applyAudio(immediate = false) {
     const target = this.ui.soundAllowed && !this.ui.miniRegie ? this.#targetVolumes() : {}
+    // Sent again as it is, without a fade: a fade from silence would dip the sound at every rebuffer.
+    for (const id of this.#resend) {
+      const player = this.players.get(id)
+      const volume = this.#fade?.to[id] ?? target[id] ?? 0
+      if (player) {
+        this.#applied.set(id, volume)
+        safely(() => player.setVolume(volume))
+      }
+    }
+    this.#resend.clear()
     const changed = [...this.players.keys()].some((id) => (this.#applied.get(id) ?? 0) !== (target[id] ?? 0))
     if (!changed) return
     if (this.session.transition === 'mix' && !immediate && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -765,7 +852,7 @@ export class Store extends TypedEventTarget<Events> {
     const before = runtime.ad.inAd
     runtime.ad = adReducer(runtime.ad, signal, Date.now())
     // The player may have changed its own sound around an ad: send the mix again rather than trust the cache.
-    if (runtime.ad.inAd !== before) this.#applied.delete(id)
+    if (runtime.ad.inAd !== before) this.#resend.add(id)
     if (runtime.ad.inAd !== before || render) this.changed(false)
   }
 
@@ -936,9 +1023,9 @@ export class Store extends TypedEventTarget<Events> {
   waitingForClick(id: string): boolean {
     const tile = this.tile(id)
     const runtime = this.runtime.get(id)
-    if (!tile || !runtime?.mountedAt || runtime.played || runtime.state === 'offline') return false
+    if (!tile || runtime?.chanceAt === undefined || runtime.played || runtime.state === 'offline') return false
     if (tile.source.platform !== 'twitch' && tile.source.platform !== 'youtube') return false
-    return Date.now() - runtime.mountedAt > 8000
+    return Date.now() - runtime.chanceAt > 8000
   }
 
   /**
@@ -952,7 +1039,7 @@ export class Store extends TypedEventTarget<Events> {
     if (!tile || !runtime || tile.source.platform !== 'twitch') return false
     return adblockSuspect(
       {
-        mountedAt: runtime.mountedAt,
+        since: runtime.chanceAt,
         played: runtime.played,
         retried: runtime.retried,
         offline: runtime.state === 'offline',
@@ -992,7 +1079,8 @@ export class Store extends TypedEventTarget<Events> {
     }
     // Twitch sometimes leaves a player "ready" without starting it: ask once more after 10 s.
     for (const [id, runtime] of this.runtime) {
-      if (runtime.played || runtime.retried || !runtime.mountedAt || now - runtime.mountedAt < 10_000) continue
+      if (runtime.played || runtime.retried || runtime.chanceAt === undefined || now - runtime.chanceAt < 10_000)
+        continue
       runtime.retried = true
       const player = this.players.get(id)
       if (player) safely(() => player.play())

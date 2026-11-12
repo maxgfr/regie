@@ -6,6 +6,7 @@ import type { Store } from '../app/store.ts'
 import { computeLayout, minimumScale, type Placed } from '../core/layout.ts'
 import { seconds, t } from '../i18n/index.ts'
 import { capabilities, platformLabel, sourcePage } from '../platforms/parse.ts'
+import { TWITCH_MIN_HEIGHT, TWITCH_MIN_WIDTH } from '../players/twitch.ts'
 import { Icon } from './Icon.tsx'
 
 const UMD = 28
@@ -68,10 +69,16 @@ export function Stage(handle: Handle<{ store: Store }>) {
     let placed = layout(null)
     // A Twitch player only starts, and only counts its ads down, when it is at least 400×300 and visible.
     // A small one that is starting or in an ad is shown large next to the main monitor until it's done.
-    const boost = store.boostCandidate((id) => {
-      const rect = placed.find((p) => p.id === id)
-      return !rect || rect.w < 400 || rect.h - UMD < 300
-    })
+    const small = new Set(
+      session.tiles
+        .filter((tile) => {
+          const rect = placed.find((p) => p.id === tile.id)
+          return !rect || rect.w < TWITCH_MIN_WIDTH || rect.h - UMD < TWITCH_MIN_HEIGHT
+        })
+        .map((tile) => tile.id),
+    )
+    store.setSmallTiles(small)
+    const boost = store.boostCandidate((id) => small.has(id))
     if (boost) placed = layout(boost)
     const byId = new Map(placed.map((p) => [p.id, p]))
     const mix = store.mix()
@@ -116,7 +123,9 @@ const tileStyle = css({
   flexDirection: 'column',
   background: '#000',
   boxShadow: '0 0 0 1px var(--line)',
-  transition: 'transform 380ms var(--ease-out), width 380ms var(--ease-out), height 380ms var(--ease-out)',
+  // Only the position glides: animating the size would resize every player on every frame (each iframe
+  // lays out and rescales its video), which stutters a wall of live streams. The size is a cut.
+  transition: 'transform 380ms var(--ease-out)',
   // The first placement is a cut, not a glide from the corner.
   '&[data-placed="false"]': { transition: 'none' },
   '&[data-overlay="true"]': { zIndex: 2 },
@@ -354,7 +363,10 @@ function TileView(handle: Handle<TileProps>) {
     const screenW = box.w
     const screenH = Math.max(0, box.h - UMD)
     // Twitch refuses to play below 400×300: render it at that size and scale it down.
-    const scale = tile.source.platform === 'twitch' ? minimumScale({ x: 0, y: 0, w: screenW, h: screenH }, 400, 300) : 1
+    const scale =
+      tile.source.platform === 'twitch'
+        ? minimumScale({ x: 0, y: 0, w: screenW, h: screenH }, TWITCH_MIN_WIDTH, TWITCH_MIN_HEIGHT)
+        : 1
     const tally = onAir ? 'pgm' : main ? 'pvw' : 'none'
     const inAd = runtime?.ad.inAd ?? false
     const name = store.label(id)
@@ -389,8 +401,7 @@ function TileView(handle: Handle<TileProps>) {
         attached = true
         store.attach(id, screen)
         // Twitch only autoplays at 400×300 or more: a smaller monitor gets a line check first.
-        const box = screen.getBoundingClientRect()
-        if (tile.source.platform === 'twitch' && (box.width < 400 || box.height < 300)) store.warmUp(id)
+        if (tile.source.platform === 'twitch' && store.isSmall(id)) store.warmUp(id)
         handle.update()
       })
     }
