@@ -39,7 +39,7 @@ Built for the evening when a tournament runs on five channels at once: the main 
   - **Merged Twitch chat** (optional): read-only and anonymous, every channel in one column. Each message is held back by its stream's latency and lead (**anti-spoiler**), so chat never reveals what the picture hasn't shown yet. It can also highlight words like "ace" or "clutch".
   - **Auto-director** (optional): when a chat spikes against its own baseline, that stream takes the sound for 20 s.
 - **On autopilot.**
-  - Each small Twitch monitor plays the lowest quality that still fills it (360p instead of 1080p), while the main monitor stays on auto. A five-stream wall uses a fraction of the bandwidth.
+  - Each small Twitch monitor plays the lowest quality that still fills it (360p instead of 1080p), while the main monitor stays on auto. A five-stream wall uses a fraction of the bandwidth. Every quality change makes Twitch rebuffer, so a monitor keeps its quality through small size changes (grid to main and back, a side panel): it only switches when the picture becomes clearly too soft or more than twice too large.
   - Favourites that go live show a notice with an Add key, can be added on their own, and can raise a system notification when Regie is in the background.
   - Ended streams are labelled offline. Players that don't start get a line check, a retry and a "click to start" label.
 - **Find creators.** Search Twitch and Kick channels and see who's live, with their category and viewer count. Star favourites, add every live favourite in one click, and find recent streams again.

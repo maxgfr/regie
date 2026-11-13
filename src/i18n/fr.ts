@@ -46,7 +46,7 @@ export const fr: Record<MessageKey, string> = {
   'tile.adOff': 'Fin de la pub (A)',
   'tile.badgeAir': 'Antenne',
   'tile.badgeMain': 'Principal',
-  'tile.badgeAd': 'Pub / pause',
+  'tile.badgeAd': 'Pub',
   'tile.badgeCover': 'Relais',
   'tile.badgeHype': 'Hype',
   'tile.badgeStart': 'Cliquez pour lancer',

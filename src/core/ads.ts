@@ -2,13 +2,15 @@
  * Guessing that a tile is playing an ad.
  *
  * No embed API reports ads (Twitch and YouTube don't, Kick has no API at all), so Regie reads the
- * signals it has: the player says it plays but its clock stops, it pauses or stalls with no user
- * action, or the user presses `A`. The verdict holds until playback is clearly back, or a timeout.
+ * signals it has: the player says it plays but its clock stops, a platform-specific hint, or the user
+ * presses `A`. A pause is never an ad: players pause for many reasons (a click inside the player, the
+ * browser, a quality switch), and a wrong "ad" moves the sound away. The verdict holds until playback is
+ * clearly back, or a timeout.
  */
 
 export type AdSignal =
   | { type: 'playing' }
-  | { type: 'paused'; byUser: boolean }
+  | { type: 'paused' }
   | { type: 'progress'; time: number }
   | { type: 'stall' }
   | { type: 'manual'; on: boolean }
@@ -37,12 +39,11 @@ export function adReducer(state: AdState, signal: AdSignal, now: number): AdStat
     case 'hint':
       if (signal.on === state.inAd) return state
       return { ...state, inAd: signal.on, since: now, source: signal.on ? 'hint' : null }
-    case 'stall':
     case 'paused':
-      // A pause by the user ends a guessed ad, but not one the player itself reported.
-      if (signal.type === 'paused' && signal.byUser) {
-        return state.source === 'hint' || state.source === 'manual' ? state : { ...state, inAd: false, source: null }
-      }
+      // A pause ends a guessed ad (the clock stood still because the player was stopping), never one the
+      // player itself reported or the user set.
+      return state.source === 'stall' ? { ...state, inAd: false, source: null } : state
+    case 'stall':
       if (state.inAd) return state
       return { ...state, inAd: true, since: now, source: 'stall' }
     case 'playing':

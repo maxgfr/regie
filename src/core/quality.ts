@@ -38,6 +38,35 @@ export function pickQuality(available: Quality[], displayHeight: number, main: b
   return levels[Math.max(0, enough - penalty)]?.id ?? 'auto'
 }
 
+/** Below this share of the monitor's height, the picture is soft enough to be worth a switch up. */
+export const SWITCH_UP_BELOW = 0.75
+/** From this many times the monitor's height, the picture is wasteful enough to be worth a switch down. */
+export const SWITCH_DOWN_FROM = 2
+
+/**
+ * The quality a player should switch to from `current`: `pickQuality`, unless the switch isn't worth it.
+ * Every switch flushes the player's buffer and restarts the stream (a visible hiccup), so a monitor whose
+ * size changes a little (grid to main and back, a side panel opening) keeps its quality: it only goes up when
+ * the picture is clearly too small for the monitor, and only down when it is at least twice as tall as
+ * needed (the same height at another frame rate isn't worth it either). Going to or from `auto` (the main
+ * monitor) always switches.
+ */
+export function nextQuality(
+  current: string,
+  available: Quality[],
+  displayHeight: number,
+  main: boolean,
+  penalty = 0,
+): string {
+  const target = pickQuality(available, displayHeight, main, penalty)
+  if (target === current || target === 'auto' || current === 'auto') return target
+  const from = available.find((quality) => quality.id === current)
+  const to = available.find((quality) => quality.id === target)
+  if (!from || !to || from.height <= 0 || to.height <= 0) return target
+  if (to.height > from.height) return from.height < displayHeight * SWITCH_UP_BELOW ? target : current
+  return from.height >= displayHeight * SWITCH_DOWN_FROM ? target : current
+}
+
 /**
  * A forced quality turns off the player's own adaptation, so a connection that can't keep up stalls instead
  * of stepping down. Two stalls within 30 s take one level off; each clean three minutes give one back.

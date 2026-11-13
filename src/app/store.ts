@@ -359,7 +359,7 @@ export class Store extends TypedEventTarget<Events> {
             runtime.played = true
             runtime.watchedAt ??= Date.now()
             this.#adSignal(id, { type: 'playing' })
-          } else if (state === 'paused' && runtime.played) this.#adSignal(id, { type: 'paused', byUser: !byPlayer })
+          } else if (state === 'paused' && runtime.played) this.#adSignal(id, { type: 'paused' })
           else this.#emit('change')
         },
         progress: (time) => this.#adSignal(id, { type: 'progress', time }, false),

@@ -1,6 +1,7 @@
 import {
   decayStalls,
   initialStalls,
+  nextQuality,
   parseTwitchQuality,
   pickQuality,
   type Quality,
@@ -78,6 +79,13 @@ const STALL_BUFFER_S = 0.5
 const SWITCH_SETTLE_MS = 6000
 /** Wait for the layout to settle before matching the quality to it (a line check or an ad boost is brief). */
 const FIT_DELAY_MS = 1500
+/** A monitor made smaller waits longer: the viewer often switches layouts back and forth. */
+const FIT_SMALL_DELAY_MS = 6000
+/**
+ * A quality switch looks like an ad for a moment: Twitch reports "Buffering" with hundreds of seconds of
+ * buffer, then plays with its clock at 0. No ad is read until the stream itself plays again, or this long.
+ */
+const SWITCH_GRACE_MS = 15_000
 /**
  * The quality is only changed once the stream itself has played this long. A `setQuality` while an ad starts
  * freezes the ad (and the stream behind it) until someone clicks the player: observed with Twitch's
@@ -134,8 +142,13 @@ export function createTwitchPlayer(context: PlayerContext): Player {
   let switchedAt = 0
   let stalls = initialStalls(Date.now())
   let qualityDirty = false
-  const applyQuality = () => {
+  // A switch Regie asked for and the stream hasn't come back from yet.
+  let switching = false
+  // A stall penalty changed: switch even where the size alone wouldn't be worth it.
+  let forceQuality = false
+  const applyQuality = (force = false) => {
     qualityDirty = true
+    if (force) forceQuality = true
     if (!player || !ready || inAd || !fitting) return
     if (contentSince === null || Date.now() - contentSince < CONTENT_SETTLE_MS) return
     try {
@@ -148,10 +161,15 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       // Device pixels count, but only up to 1.25×: on a Retina wall a small monitor at 360p looks the
       // same and costs a third of 720p.
       const density = Math.min(window.devicePixelRatio || 1, 1.25)
-      const next = pickQuality(available, Math.round(fitting.height * density), fitting.main, stalls.penalty)
+      const height = Math.round(fitting.height * density)
+      const next = forceQuality
+        ? pickQuality(available, height, fitting.main, stalls.penalty)
+        : nextQuality(quality, available, height, fitting.main, stalls.penalty)
+      forceQuality = false
       if (next === quality) return
       quality = next
       switchedAt = Date.now()
+      switching = true
       player.setQuality(next)
     } catch {
       // Qualities aren't known yet; the next fit or the next "playing" tries again.
@@ -174,7 +192,7 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       if (now - switchedAt > SWITCH_SETTLE_MS && (update.buffer ?? 0) < STALL_BUFFER_S) {
         const before = stalls.penalty
         stalls = recordStall(stalls, now)
-        if (stalls.penalty !== before) applyQuality()
+        if (stalls.penalty !== before) applyQuality(true)
       }
     }
     lastPlayback = update.playback
@@ -188,7 +206,20 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       frozenMs < AD_FROZEN_MS &&
       (!live || update.latency === undefined || update.latency > 0)
     contentSince = content ? (contentSince ?? now) : null
-    const signature = document.hidden ? null : adSignature(update, { live, zeroLatencyIsAd: !latencyless, frozenMs })
+    if (switching && content && update.time) switching = false
+    else if (switching && now - switchedAt > SWITCH_GRACE_MS) {
+      switching = false
+      // Twitch sometimes stays stuck after a switch until someone clicks the player: start it again.
+      if (update.playback !== 'Playing') {
+        try {
+          player?.play()
+        } catch {
+          // Nothing more to do: the viewer can still click the player.
+        }
+      }
+    }
+    const signature =
+      document.hidden || switching ? null : adSignature(update, { live, zeroLatencyIsAd: !latencyless, frozenMs })
     if (signature !== adKind) {
       adKind = signature
       adSince = now
@@ -256,8 +287,11 @@ export function createTwitchPlayer(context: PlayerContext): Player {
         instance.play()
       })
       instance.addEventListener(Twitch.Player.PLAY, () => events.state('buffering', true))
-      // Twitch also sends PAUSE when it rebuffers. Ads come from the state messages; a pause is never an ad.
-      instance.addEventListener(Twitch.Player.PAUSE, () => events.state('paused', false))
+      // Twitch also sends PAUSE when it rebuffers, and when Regie switches its quality (that one isn't the
+      // viewer's). Ads come from the state messages; a pause is never an ad.
+      instance.addEventListener(Twitch.Player.PAUSE, () =>
+        switching ? events.state('buffering', true) : events.state('paused', false),
+      )
       instance.addEventListener(Twitch.Player.ENDED, () => events.state('ended', true))
       instance.addEventListener(Twitch.Player.OFFLINE, () => events.state('offline', true))
       instance.addEventListener(Twitch.Player.ONLINE, () => events.state('buffering', true))
@@ -266,7 +300,7 @@ export function createTwitchPlayer(context: PlayerContext): Player {
         const relaxed = decayStalls(stalls, Date.now())
         if (relaxed !== stalls) {
           stalls = relaxed
-          applyQuality()
+          applyQuality(true)
         }
         try {
           if (source.kind === 'vod') events.progress(player.getCurrentTime())
@@ -298,7 +332,7 @@ export function createTwitchPlayer(context: PlayerContext): Player {
     fit(displayHeight, main) {
       fitting = { height: displayHeight, main }
       clearTimeout(fitTimer)
-      fitTimer = setTimeout(applyQuality, FIT_DELAY_MS)
+      fitTimer = setTimeout(() => applyQuality(), main ? FIT_DELAY_MS : FIT_SMALL_DELAY_MS)
     },
     destroy() {
       destroyed = true

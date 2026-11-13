@@ -3,6 +3,7 @@ import {
   decayStalls,
   initialStalls,
   MAX_PENALTY,
+  nextQuality,
   PENALTY_DECAY_MS,
   parseTwitchQuality,
   pickQuality,
@@ -39,6 +40,26 @@ test('a stalling player steps down, never below the lowest level', () => {
   expect(pickQuality(twitch, 300, false, 5)).toBe('160p30')
   expect(pickQuality(twitch, 600, false, 1)).toBe('480p30')
   expect(pickQuality(twitch, 1400, false, 1)).toBe('720p30')
+})
+
+test('a monitor that changes size a little keeps its quality: every switch is a hiccup', () => {
+  // Grid to main and back: 480p needed, then 360p.
+  expect(nextQuality('480p30', twitch, 300, false)).toBe('480p30')
+  expect(nextQuality('360p30', twitch, 400, false)).toBe('360p30')
+  // Same height at another frame rate.
+  expect(nextQuality('720p60', twitch, 600, false)).toBe('720p60')
+})
+
+test('a monitor switches when its picture is clearly too small or wasteful', () => {
+  expect(nextQuality('360p30', twitch, 600, false)).toBe('720p30')
+  expect(nextQuality('720p30', twitch, 300, false)).toBe('360p30')
+  expect(nextQuality('chunked', twitch, 150, false)).toBe('160p30')
+})
+
+test('going to or from auto always switches', () => {
+  expect(nextQuality('360p30', twitch, 300, true)).toBe('auto')
+  expect(nextQuality('auto', twitch, 300, false)).toBe('360p30')
+  expect(nextQuality('auto', twitch, 300, true)).toBe('auto')
 })
 
 test('two stalls close together take one level off; a clean stretch gives it back', () => {

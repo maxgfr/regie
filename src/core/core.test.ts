@@ -114,14 +114,17 @@ describe('ads', () => {
     expect(state.inAd).toBe(false)
   })
 
-  test('a pause by the user is not an ad, a pause by the player is', () => {
-    expect(adReducer(initialAdState(0), { type: 'paused', byUser: true }, 1).inAd).toBe(false)
-    expect(adReducer(initialAdState(0), { type: 'paused', byUser: false }, 1).inAd).toBe(true)
+  test('a pause is never an ad, and it ends a guessed one', () => {
+    expect(adReducer(initialAdState(0), { type: 'paused' }, 1).inAd).toBe(false)
+    let state = adReducer(initialAdState(0), { type: 'progress', time: 10 }, 0)
+    state = adTick(state, STALL_MS + 1, true)
+    expect(state.inAd).toBe(true)
+    expect(adReducer(state, { type: 'paused' }, STALL_MS + 2).inAd).toBe(false)
   })
 
   test('a pause does not end an ad the player reported', () => {
     let state = adReducer(initialAdState(0), { type: 'hint', on: true }, 0)
-    state = adReducer(state, { type: 'paused', byUser: true }, 10)
+    state = adReducer(state, { type: 'paused' }, 10)
     expect(state.inAd).toBe(true)
     expect(adReducer(state, { type: 'hint', on: false }, 20).inAd).toBe(false)
   })

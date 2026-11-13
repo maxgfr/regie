@@ -44,7 +44,7 @@ export const en = {
   'tile.adOff': 'End of the ad (A)',
   'tile.badgeAir': 'On air',
   'tile.badgeMain': 'Main',
-  'tile.badgeAd': 'Ad / pause',
+  'tile.badgeAd': 'Ad',
   'tile.badgeCover': 'Covering',
   'tile.badgeHype': 'Hype',
   'tile.badgeStart': 'Click to start',
