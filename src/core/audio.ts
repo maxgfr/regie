@@ -6,6 +6,8 @@ export interface AudioTile {
   muted: boolean
   inAd: boolean
   hype: number
+  /** Silent although it wasn't the viewer's doing: stopped by the platform, not started yet, offline. */
+  idle?: boolean
 }
 
 export interface AudioInput {
@@ -17,21 +19,24 @@ export interface AudioInput {
   listenId: string | null
   duck: number
   master: number
-  /** When the tile on air plays an ad, hand the sound to another one. */
+  /** When the tile on air plays an ad, or the platform stopped it, hand the sound to another one. */
   adSwitch: boolean
 }
 
 export interface AudioOutput {
   /** The tile that has the sound (tally light), if any. */
   onAir: string | null
-  /** True when `onAir` was picked because the chosen tile is in an ad. */
+  /** True when `onAir` was picked because the chosen tile is in an ad or stopped. */
   covering: boolean
   volumes: Record<string, number>
 }
 
-/** The tile that takes over while the one on air is in an ad: the hottest chat, else the next one in order. */
+/**
+ * The tile that takes over while the one on air is in an ad or stopped: one that plays, the hottest chat first,
+ * else the next one in order.
+ */
 export function standIn(tiles: AudioTile[], from: string): string | null {
-  const candidates = tiles.filter((tile) => tile.id !== from && !tile.inAd && !tile.muted)
+  const candidates = tiles.filter((tile) => tile.id !== from && !tile.inAd && !tile.idle && !tile.muted)
   if (candidates.length === 0) return null
   const hottest = candidates.reduce((best, tile) => (tile.hype > best.hype ? tile : best))
   if (hottest.hype > 0) return hottest.id
@@ -49,7 +54,7 @@ export function mixAudio(input: AudioInput): AudioOutput {
   const chosen = tiles.find((tile) => tile.id === (input.listenId ?? input.audioId)) ?? tiles[0] ?? null
   let onAir = chosen?.id ?? null
   let covering = false
-  if (chosen?.inAd && adSwitch) {
+  if ((chosen?.inAd || chosen?.idle) && adSwitch) {
     const other = standIn(tiles, chosen.id)
     if (other) {
       onAir = other

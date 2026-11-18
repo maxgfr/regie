@@ -58,6 +58,10 @@ export interface TileRuntime {
   resumedAt?: number
   /** The viewer chose to hear this tile during its current ad: the ad doesn't move its sound away. */
   adHeard?: boolean
+  /** The current pause is the viewer's (they were inside the player): its sound isn't moved away. */
+  pausedByViewer?: boolean
+  /** Last `idle` the mix saw, to re-render when it changes. */
+  idleSeen?: boolean
   /** Title from the platform's oEmbed, when it has one. */
   title?: string
   /** Live status, title, category and audience of a Twitch or Kick channel. */
@@ -78,6 +82,8 @@ function safely<T>(call: () => T): T | undefined {
 const LAYOUT_CYCLE: LayoutMode[] = ['grid', 'focus', 'theater']
 /** A Twitch pause shorter than this is a rebuffer. */
 const RESUME_AFTER_MS = 3000
+/** A Twitch tile silent this long without the viewer asking gives its sound to one that plays. */
+const IDLE_AFTER_MS = 3000
 /** Between two attempts to restart the same player. */
 const RESUME_EVERY_MS = 5000
 const MAX_CHAT = 400
@@ -355,6 +361,10 @@ export class Store extends TypedEventTarget<Events> {
           if (!runtime) return
           runtime.state = state
           runtime.pausedAt = state === 'paused' ? (runtime.pausedAt ?? Date.now()) : undefined
+          if (state === 'paused') {
+            // Clicking inside a player moves the focus into its iframe: a pause from there is the viewer's.
+            runtime.pausedByViewer ||= this.#containers.get(id)?.contains(document.activeElement) ?? false
+          } else runtime.pausedByViewer = false
           if (state === 'playing') {
             this.#resend.add(id)
             if (!runtime.played && this.ui.warmup?.id === id) setTimeout(() => this.#nextWarmup(id), 1200)
@@ -755,6 +765,7 @@ export class Store extends TypedEventTarget<Events> {
           muted: tile.muted,
           inAd: (runtime?.ad.inAd ?? false) && !runtime?.adHeard,
           hype: runtime ? spike(runtime.hype, now) : 0,
+          idle: this.#idle(tile, runtime, now),
         }
       }),
       mode: this.session.audioMode,
@@ -764,6 +775,23 @@ export class Store extends TypedEventTarget<Events> {
       master: this.session.master,
       adSwitch: this.session.adSwitch,
     })
+  }
+
+  /**
+   * A Twitch tile that makes no sound although the viewer didn't ask for it: not started yet (autoplay refused,
+   * a content warning), offline, or stopped by Twitch itself for a few seconds (an ad waiting for a click, a
+   * refused restart). Its sound goes to a stream that plays. Wall paused with Regie's key: nothing moves.
+   */
+  #idle(tile: Tile, runtime: TileRuntime | undefined, now: number): boolean {
+    if (!runtime || tile.source.platform !== 'twitch' || this.#holding) return false
+    if (runtime.state === 'offline' || runtime.state === 'ended') return true
+    if (!runtime.played) return runtime.chanceAt !== undefined && now - runtime.chanceAt >= IDLE_AFTER_MS
+    return (
+      runtime.state === 'paused' &&
+      !runtime.pausedByViewer &&
+      runtime.pausedAt !== undefined &&
+      now - runtime.pausedAt >= IDLE_AFTER_MS
+    )
   }
 
   #targetVolumes(): Record<string, number> {
@@ -1116,6 +1144,12 @@ export class Store extends TypedEventTarget<Events> {
       runtime.ad = adTick(runtime.ad, now, runtime.state === 'playing')
       if (!runtime.ad.inAd) runtime.adHeard = false
       if (runtime.ad.inAd !== before) adChanged = true
+      const tile = this.tile(id)
+      const idle = tile ? this.#idle(tile, runtime, now) : false
+      if (idle !== (runtime.idleSeen ?? false)) {
+        runtime.idleSeen = idle
+        adChanged = true
+      }
       if (this.session.autoDirector && !this.ui.takeover && spike(runtime.hype, now) >= TAKEOVER_SPIKE) {
         if (this.mix().onAir !== id) {
           this.ui.takeover = { id, until: now + TAKEOVER_MS }

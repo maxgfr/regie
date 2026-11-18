@@ -18,7 +18,10 @@ import { decayHype, initialHype, recordMessage, spike } from './hype.ts'
 import { decodeSession, defaultSession, encodeSession, newTile } from './session.ts'
 import { chatHold, planSync } from './sync.ts'
 
-const tile = (id: string, extra: Partial<{ volume: number; muted: boolean; inAd: boolean; hype: number }> = {}) => ({
+const tile = (
+  id: string,
+  extra: Partial<{ volume: number; muted: boolean; inAd: boolean; hype: number; idle: boolean }> = {},
+) => ({
   id,
   volume: 1,
   muted: false,
@@ -59,6 +62,20 @@ describe('mixAudio', () => {
     expect(mixAudio({ ...base, adSwitch: false, tiles, audioId: 'a' }).onAir).toBe('a')
     const all = [tile('a', { inAd: true }), tile('b', { inAd: true })]
     expect(mixAudio({ ...base, tiles: all, audioId: 'a' }).onAir).toBe('a')
+  })
+
+  test('a tile on air that the platform stopped hands the sound to one that plays', () => {
+    const tiles = [tile('a', { idle: true }), tile('b', { idle: true }), tile('c')]
+    expect(mixAudio({ ...base, tiles, audioId: 'a' })).toEqual({
+      onAir: 'c',
+      covering: true,
+      volumes: { a: 0, b: 0, c: 1 },
+    })
+    // Nothing plays: the choice stays.
+    const stopped = [tile('a', { idle: true }), tile('b', { idle: true })]
+    expect(mixAudio({ ...base, tiles: stopped, audioId: 'a' }).onAir).toBe('a')
+    // An ad's stand-in is never a stopped tile.
+    expect(standIn([tile('a', { inAd: true }), tile('b', { idle: true }), tile('c')], 'a')).toBe('c')
   })
 
   test('an ad is never forced silent: with nowhere to send the sound, it keeps it', () => {

@@ -58,6 +58,9 @@ export const TWITCH_MIN_HEIGHT = 300
  * - `Playing` with no broadcaster latency: a pre-roll plays (a live stream reports how far behind the
  *   broadcaster it is; an ad has no broadcaster). A stream that shows no latency for longer than any ad
  *   break (`AD_BREAK_MAX_MS`) simply doesn't report one: from then on, a latency of 0 means nothing for it.
+ * - `Playing` while the broadcaster latency hasn't moved for `AD_LATENCY_FROZEN_MS`, the clock running: the
+ *   "commercial break in progress" slate. The stream reports a new latency every two or three seconds; the
+ *   slate keeps the last one (observed: 2.367 s for 25 s and more, never above 3 s on a stream).
  * Both held for `AD_RUNNING_MS`.
  * - `Buffering` while the buffer holds many seconds: the stream waits behind an ad that doesn't move. A real
  *   stall has an empty buffer. Held for `AD_STUCK_MS`.
@@ -68,6 +71,9 @@ export const TWITCH_MIN_HEIGHT = 300
  */
 export const AD_RUNNING_MS = 3000
 export const AD_FROZEN_MS = 2000
+export const AD_LATENCY_FROZEN_MS = 6000
+/** A latency older than this isn't fresh: what plays may not be the stream itself. */
+const LATENCY_STALE_MS = 4000
 export const AD_BREAK_MAX_MS = 200_000
 export const AD_STUCK_MS = 8000
 /** Without any signal for this long, an ad is over even if the stream isn't playing yet. */
@@ -117,6 +123,9 @@ export function createTwitchPlayer(context: PlayerContext): Player {
   // The stream's own clock: it stands still while an ad plays over it.
   let lastTime: number | undefined
   let timeMovedAt = Date.now()
+  // The broadcaster latency: it stands still while the "commercial break" slate plays.
+  let lastLatency: number | undefined
+  let latencyMovedAt = Date.now()
   const live = source.kind !== 'vod'
   // Since when the stream itself (not an ad) has been playing without a break.
   let contentSince: number | null = null
@@ -202,9 +211,16 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       timeMovedAt = now
     }
     const frozenMs = update.playback === 'Playing' && update.time !== undefined ? now - timeMovedAt : 0
+    // Only counted while playing: a latency kept through a pause says nothing.
+    if (update.playback !== 'Playing' || update.latency !== lastLatency) {
+      lastLatency = update.latency
+      latencyMovedAt = now
+    }
+    const latencyFrozenMs = live && update.latency && update.latency > 0 ? now - latencyMovedAt : 0
     const content =
       update.playback === 'Playing' &&
       frozenMs < AD_FROZEN_MS &&
+      latencyFrozenMs < LATENCY_STALE_MS &&
       (!live || update.latency === undefined || update.latency > 0)
     contentSince = content ? (contentSince ?? now) : null
     if (switching && content && update.time) switching = false
@@ -220,7 +236,9 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       }
     }
     const signature =
-      document.hidden || switching ? null : adSignature(update, { live, zeroLatencyIsAd: !latencyless, frozenMs })
+      document.hidden || switching
+        ? null
+        : adSignature(update, { live, zeroLatencyIsAd: !latencyless, frozenMs, latencyFrozenMs })
     if (signature !== adKind) {
       adKind = signature
       adSince = now
@@ -365,7 +383,7 @@ type AdSignature = 'running' | 'stuck' | null
 /**
  * Which ad signature a state message shows, if any (see `AD_RUNNING_MS` and `AD_STUCK_MS`). `zeroLatencyIsAd`:
  * false for a stream that never reports a latency. `frozenMs`: how long the stream's clock has stood still
- * while playing.
+ * while playing. `latencyFrozenMs`: how long the broadcaster latency has stood still while playing.
  */
 export function adSignature(
   update: TwitchUpdate | null,
@@ -373,11 +391,13 @@ export function adSignature(
     live = true,
     zeroLatencyIsAd = true,
     frozenMs = 0,
-  }: { live?: boolean; zeroLatencyIsAd?: boolean; frozenMs?: number } = {},
+    latencyFrozenMs = 0,
+  }: { live?: boolean; zeroLatencyIsAd?: boolean; frozenMs?: number; latencyFrozenMs?: number } = {},
 ): AdSignature {
   if (!update) return null
   if (live && update.playback === 'Playing' && update.fps > 0) {
     if (frozenMs >= AD_FROZEN_MS) return 'running'
+    if (latencyFrozenMs >= AD_LATENCY_FROZEN_MS) return 'running'
     if (zeroLatencyIsAd && update.latency === 0) return 'running'
   }
   if (update.playback === 'Buffering' && (update.buffer ?? 0) >= AD_MIN_BUFFER_S) return 'stuck'

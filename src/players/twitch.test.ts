@@ -67,6 +67,28 @@ test('a mid-roll plays over the stream while its clock stands still', () => {
   expect(adSignature(update, { frozenMs: 2500, live: false })).toBeNull()
 })
 
+test('the "commercial break" slate plays with the clock running and the latency frozen', () => {
+  // Observed on chowh1: playing at 21 fps, the clock moving, the latency stuck at 2.367 s for 25 s and more.
+  const update = readUpdate({
+    eventName: 'UPDATE_STATE',
+    params: {
+      playback: 'Playing',
+      currentTime: 45.24,
+      stats: { videoStats: { fps: 21, hlsLatencyBroadcaster: 2.367, bufferSize: 4.9 } },
+    },
+  })
+  expect(adSignature(update, { latencyFrozenMs: 6500 })).toBe('running')
+  // On a stream the latency changes every two or three seconds.
+  expect(adSignature(update, { latencyFrozenMs: 2900 })).toBeNull()
+  expect(adSignature(update, { latencyFrozenMs: 6500, live: false })).toBeNull()
+  // A paused player is never an ad, whatever its latency.
+  const paused = readUpdate({
+    eventName: 'UPDATE_STATE',
+    params: { playback: 'Idle', stats: { videoStats: { fps: 3, hlsLatencyBroadcaster: 2.367 } } },
+  })
+  expect(adSignature(paused, { latencyFrozenMs: 60_000 })).toBeNull()
+})
+
 test('ignores other messages', () => {
   expect(readUpdate(null)).toBeNull()
   expect(readUpdate({ eventName: 'OTHER', params: {} })).toBeNull()
