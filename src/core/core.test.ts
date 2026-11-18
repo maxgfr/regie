@@ -61,6 +61,26 @@ describe('mixAudio', () => {
     expect(mixAudio({ ...base, tiles: all, audioId: 'a' }).onAir).toBe('a')
   })
 
+  test('an ad is always silent, even with nowhere to send the sound', () => {
+    const all = [tile('a', { inAd: true }), tile('b', { inAd: true })]
+    expect(mixAudio({ ...base, tiles: all, audioId: 'a' })).toEqual({
+      onAir: 'a',
+      covering: false,
+      volumes: { a: 0, b: 0 },
+    })
+    expect(
+      mixAudio({ ...base, adSwitch: false, tiles: [tile('a', { inAd: true }), tile('b')], audioId: 'a' }).volumes,
+    ).toEqual({ a: 0, b: 0 })
+    // Ducked tiles in an ad stay silent too.
+    const mixed = mixAudio({ ...base, mode: 'mix', tiles: [tile('a'), tile('b', { inAd: true })], audioId: 'a' })
+    expect(mixed.volumes).toEqual({ a: 1, b: 0 })
+  })
+
+  test('the sound comes back to the chosen tile when its ad ends', () => {
+    const tiles = [tile('a'), tile('b')]
+    expect(mixAudio({ ...base, tiles, audioId: 'a' })).toEqual({ onAir: 'a', covering: false, volumes: { a: 1, b: 0 } })
+  })
+
   test('manual: each fader counts, muted tiles stay silent', () => {
     const tiles = [tile('a', { volume: 0.3 }), tile('b', { volume: 0.7, muted: true })]
     expect(mixAudio({ ...base, mode: 'manual', tiles, audioId: 'a' }).volumes).toEqual({ a: 0.3, b: 0 })
