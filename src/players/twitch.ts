@@ -121,9 +121,10 @@ export function createTwitchPlayer(context: PlayerContext): Player {
   // Since when the stream itself (not an ad) has been playing without a break.
   let contentSince: number | null = null
   // Autoplay with sound can be refused (PLAYBACK_BLOCKED): the player starts muted, and the sound only comes
-  // on once it really plays. Ads are always silent here: another stream carries the sound meanwhile.
+  // on once it really plays. An ad isn't muted here: Regie's mix decides, and only silences an ad when another
+  // stream takes the sound.
   let playing = false
-  const expectMuted = () => wanted <= 0 || !playing || inAd
+  const expectMuted = () => wanted <= 0 || !playing
   // When Regie last changed the sound, or the player changed state: differences right after are the player's
   // own doing (it restores its state around ads and starts), not the viewer's.
   let settledAt = 0
@@ -241,8 +242,11 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       update.muted !== expectMuted() ||
       (!update.muted && update.volume !== undefined && Math.abs(update.volume - wanted) > 0.02)
     if (!differs) return
-    if (inAd || !playing || now - settledAt < 3000) {
-      // Twitch put its own state back (after an ad or a start): Regie's mix wins.
+    // Twitch puts its own saved sound back on its own (around ads, starts, quality switches): only a change made
+    // while the viewer is inside this player (it has the focus) is theirs.
+    const byViewer = playing && now - settledAt >= 1000 && frame !== null && document.activeElement === frame
+    if (!byViewer) {
+      // Regie's mix wins.
       apply()
     } else {
       // The viewer used the player's own mute button or slider: that becomes Regie's setting.

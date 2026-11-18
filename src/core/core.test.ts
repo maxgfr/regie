@@ -61,6 +61,21 @@ describe('mixAudio', () => {
     expect(mixAudio({ ...base, tiles: all, audioId: 'a' }).onAir).toBe('a')
   })
 
+  test('an ad is never forced silent: with nowhere to send the sound, it keeps it', () => {
+    const all = [tile('a', { inAd: true }), tile('b', { inAd: true })]
+    expect(mixAudio({ ...base, tiles: all, audioId: 'a' })).toEqual({
+      onAir: 'a',
+      covering: false,
+      volumes: { a: 1, b: 0 },
+    })
+    expect(
+      mixAudio({ ...base, adSwitch: false, tiles: [tile('a', { inAd: true }), tile('b')], audioId: 'a' }).volumes,
+    ).toEqual({
+      a: 1,
+      b: 0,
+    })
+  })
+
   test('manual: each fader counts, muted tiles stay silent', () => {
     const tiles = [tile('a', { volume: 0.3 }), tile('b', { volume: 0.7, muted: true })]
     expect(mixAudio({ ...base, mode: 'manual', tiles, audioId: 'a' }).volumes).toEqual({ a: 0.3, b: 0 })

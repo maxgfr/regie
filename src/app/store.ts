@@ -56,6 +56,8 @@ export interface TileRuntime {
   pausedAt?: number
   /** Last time Regie restarted a player that stopped on its own. */
   resumedAt?: number
+  /** The viewer chose to hear this tile during its current ad: the ad doesn't move its sound away. */
+  adHeard?: boolean
   /** Title from the platform's oEmbed, when it has one. */
   title?: string
   /** Live status, title, category and audience of a Twitch or Kick channel. */
@@ -480,6 +482,7 @@ export class Store extends TypedEventTarget<Events> {
       tile.muted = true
     } else {
       tile.muted = false
+      this.#hear(id)
       if (volume > 0) tile.volume = Math.round(volume * 100) / 100
       if (!onAir && this.session.audioMode === 'solo') {
         this.session.audioId = id
@@ -659,6 +662,7 @@ export class Store extends TypedEventTarget<Events> {
     this.ui.takeover = null
     const tile = this.tile(id)
     if (tile?.muted) tile.muted = false
+    this.#hear(id)
     this.changed()
   }
 
@@ -707,7 +711,10 @@ export class Store extends TypedEventTarget<Events> {
     const tile = this.tile(id)
     if (!tile) return
     tile.volume = Math.min(1, Math.max(0, volume))
-    if (tile.volume > 0) tile.muted = false
+    if (tile.volume > 0) {
+      tile.muted = false
+      this.#hear(id)
+    }
     this.changed()
   }
 
@@ -715,7 +722,14 @@ export class Store extends TypedEventTarget<Events> {
     const tile = this.tile(id)
     if (!tile) return
     tile.muted = !tile.muted
+    if (!tile.muted) this.#hear(id)
     this.changed()
+  }
+
+  /** What the viewer sets wins over an ad: a tile they chose to hear keeps its sound until its ad ends. */
+  #hear(id: string) {
+    const runtime = this.runtime.get(id)
+    if (runtime?.ad.inAd) runtime.adHeard = true
   }
 
   setMaster(value: number) {
@@ -739,7 +753,7 @@ export class Store extends TypedEventTarget<Events> {
           id: tile.id,
           volume: tile.volume,
           muted: tile.muted,
-          inAd: runtime?.ad.inAd ?? false,
+          inAd: (runtime?.ad.inAd ?? false) && !runtime?.adHeard,
           hype: runtime ? spike(runtime.hype, now) : 0,
         }
       }),
@@ -881,6 +895,7 @@ export class Store extends TypedEventTarget<Events> {
     if (!runtime) return
     const before = runtime.ad.inAd
     runtime.ad = adReducer(runtime.ad, signal, Date.now())
+    if (!runtime.ad.inAd) runtime.adHeard = false
     // The player may have changed its own sound around an ad: send the mix again rather than trust the cache.
     if (runtime.ad.inAd !== before) this.#resend.add(id)
     if (runtime.ad.inAd !== before || render) this.changed(false)
@@ -1099,6 +1114,7 @@ export class Store extends TypedEventTarget<Events> {
       runtime.hype = decayHype(runtime.hype, now)
       const before = runtime.ad.inAd
       runtime.ad = adTick(runtime.ad, now, runtime.state === 'playing')
+      if (!runtime.ad.inAd) runtime.adHeard = false
       if (runtime.ad.inAd !== before) adChanged = true
       if (this.session.autoDirector && !this.ui.takeover && spike(runtime.hype, now) >= TAKEOVER_SPIKE) {
         if (this.mix().onAir !== id) {
