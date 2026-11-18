@@ -64,9 +64,8 @@ export function mixAudio(input: AudioInput): AudioOutput {
     else if (tile.id === onAir) level = tile.volume
     else if (mode === 'mix') level = tile.volume * duck
     else level = 0
-    // An ad is always silent, even when no other tile can take the sound: the player keeps playing it,
-    // Regie only routes the sound.
-    if (tile.inAd) level = 0
+    // An ad is silenced when another tile covers it.
+    if (tile.inAd && adSwitch && tile.id !== onAir && covering) level = 0
     volumes[tile.id] = Math.round(level * master * 1000) / 1000
   }
   if (mode === 'manual') {
