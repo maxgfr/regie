@@ -300,3 +300,110 @@ test('muting or unmuting inside a player is followed, not overridden', async ({ 
     true,
   )
 })
+
+const RELAY = 'http://localhost:7878'
+const CORS = { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'X-Regie-Ad' }
+
+/**
+ * A relay saved in this browser, stubbed: `health` says whether it answers, `play` whether its playlist
+ * loads. The playlists are real HLS; the segment never arrives, so the player stays on the relay, loading.
+ */
+async function relay(page: Page, { health, play }: { health: boolean; play: boolean }) {
+  const requests: string[] = []
+  await page.addInitScript((url) => {
+    localStorage.setItem('regie:preferences', JSON.stringify({ relayUrl: url, relayKey: '' }))
+  }, RELAY)
+  await page.route('https://player.twitch.tv/js/embed/v1.js', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE_TWITCH }),
+  )
+  await page.route(`${RELAY}/**`, async (route) => {
+    const url = new URL(route.request().url())
+    requests.push(url.pathname + url.search)
+    if (url.pathname === '/health') {
+      return health
+        ? route.fulfill({
+            status: 200,
+            headers: CORS,
+            json: { ok: true, version: 1, ytdlp: '2026.10.26', ffmpeg: '7.1' },
+          })
+        : route.fulfill({ status: 503, headers: CORS, body: 'down' })
+    }
+    const m3u8 = { ...CORS, 'content-type': 'application/vnd.apple.mpegurl', 'x-regie-ad': '0' }
+    if (url.pathname === '/play.m3u8') {
+      if (!play) return route.fulfill({ status: 502, headers: CORS, body: 'upstream failed' })
+      return route.fulfill({
+        status: 200,
+        headers: m3u8,
+        body: `#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360\n${RELAY}/v/s1/360p.m3u8\n`,
+      })
+    }
+    if (url.pathname.endsWith('.m3u8')) {
+      return route.fulfill({
+        status: 200,
+        headers: m3u8,
+        body: `#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:1\n#EXTINF:2.000,live\n${RELAY}/s/s1/1.ts\n`,
+      })
+    }
+    // Segments: never answered.
+    await new Promise(() => undefined)
+  })
+  return requests
+}
+
+const twitchPlayers = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __players?: unknown[] }).__players?.length ?? 0)
+
+test('with the relay unreachable, a Twitch stream keeps its official player', async ({ page }) => {
+  await relay(page, { health: false, play: true })
+  await page.goto('/#s=tw.alpha')
+  await expect(page.locator('[data-tile] iframe')).toHaveCount(1)
+  await expect(page.locator('[data-tile] video')).toHaveCount(0)
+  expect(await twitchPlayers(page)).toBe(1)
+  await page.getByRole('button', { name: 'Help', exact: true }).click()
+  await expect(page.getByText('Unreachable: official players are used')).toBeVisible()
+})
+
+test('with the relay up, a Twitch stream plays from it, tagged HLS', async ({ page }) => {
+  const requests = await relay(page, { health: true, play: true })
+  await page.goto('/#s=tw.alpha')
+  await expect(page.locator('[data-tile] video')).toHaveCount(1)
+  await expect(page.locator('[data-tile] .tag[data-kind="hls"]')).toBeVisible()
+  await expect
+    .poll(() => requests.find((path) => path.startsWith('/play.m3u8')))
+    .toBe(`/play.m3u8?src=${encodeURIComponent('https://www.twitch.tv/alpha')}`)
+  await expect.poll(() => requests.includes('/v/s1/360p.m3u8')).toBe(true)
+  // The official embed was never mounted, so it never had to be reloaded.
+  expect(await twitchPlayers(page)).toBe(0)
+  await expect(page.locator('[data-tile] iframe')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Help', exact: true }).click()
+  await expect(page.getByText('Connected · yt-dlp 2026.10.26 · ffmpeg 7.1')).toBeVisible()
+  await page.unrouteAll({ behavior: 'ignoreErrors' })
+})
+
+test('a stream the relay can’t play falls back to its official player, in place', async ({ page }) => {
+  const requests = await relay(page, { health: true, play: false })
+  await page.goto('/#s=tw.alpha|w.https://example.com/other')
+  await expect.poll(() => requests.some((path) => path.startsWith('/play.m3u8'))).toBe(true)
+  await expect.poll(() => twitchPlayers(page), { timeout: 10_000 }).toBe(1)
+  const tile = page.locator('[data-tile]').first()
+  await expect(tile.locator('iframe')).toHaveCount(1)
+  await expect(tile.locator('video')).toHaveCount(0)
+  await expect(tile.locator('.tag[data-kind="hls"]')).toHaveCount(0)
+})
+
+test('a live video stays at real time, whatever a speed extension sets; a VOD keeps its speed', async ({ page }) => {
+  await page.goto('/#s=vl.https://example.com/live.m3u8|v.https://example.com/a.mp4')
+  await expect(page.locator('[data-tile] video')).toHaveCount(2)
+  const rates = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-tile] video')].map((node) => {
+      const video = node as HTMLVideoElement
+      video.playbackRate = 3
+      video.defaultPlaybackRate = 3
+      return [video.playbackRate, video.defaultPlaybackRate]
+    }),
+  )
+  expect(rates).toEqual([
+    [1, 1],
+    [3, 3],
+  ])
+})

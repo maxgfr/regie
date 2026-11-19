@@ -7,7 +7,8 @@ Static multi-stream viewer deployed on GitHub Pages. Read `PRODUCT.md` (product 
 - `bun run dev`: dev server on :5173 (`scripts/dev.ts` serves the bundled page, `public/` and fonts).
 - `bun run check`: typecheck + Biome + unit tests + build. It must stay green.
 - `bun run endpoints`: checks the real third-party endpoints (also run daily by `.github/workflows/endpoints.yml`).
-- `bun run test:e2e`: Playwright on `dist/` (run `bun run build` first). Every third-party request is stubbed.
+- `bun run test:e2e`: Playwright on `dist/` (run `bun run build` first). Every third-party request is stubbed, the relay included.
+- `bun run relay`: the optional ad-free HLS relay on :7878 (see the README).
 
 ## Rules that are easy to break
 
@@ -23,6 +24,17 @@ Static multi-stream viewer deployed on GitHub Pages. Read `PRODUCT.md` (product 
 - **Third-party calls must never break the room.** Wrap player calls with `safely()`, and have directory and title fetches return `null`/`[]` on failure.
 - **Anonymous only:** no account, OAuth app or API key. Twitch GQL uses the public web client id and is read-only.
 - The URL hash is the session (`core/session.ts`). Keep encoding backward compatible.
+
+## Relay (optional, `relay/`)
+
+The page must work exactly as before without it. A relayed tile plays the relay's HLS in `players/video.ts` (hls.js); every other tile keeps its embed.
+
+- **The relay never breaks the room.** `/health` has a 3 s timeout and returns `null` on failure. A relayed player that fails before its first picture calls `onFail`, and the store mounts the embed **in the same container** (`#remount`, never a new node). If the relay stops answering, the embeds take over.
+- **Relayed tiles skip the Twitch embed constraints.** Gate embed-only behaviour on `store.embedTwitch(id)`, not on `platform === 'twitch'`: 400×300 scaling, line check, boost, ad reload, quality fit, ad-blocker and "click to start" heuristics. Chat, IRC, directory and titles stay on `platform`.
+- **Capabilities depend on the player:** use `store.caps(tile)`, not `capabilities(tile.source)`.
+- **Relay settings live in localStorage** (`library.relaySettings()`), never in the hash: they belong to the machine, and a shared link must play on both sides.
+- At startup, players the relay could take wait for its first answer (`RELAY_WAIT_MS`), so they don't mount twice. A later status change remounts only the tiles it affects, once.
+- Server side: no open proxy. `src` is parsed with `parseSource()` and allow-listed; segments are served only by opaque ids the relay created; yt-dlp is spawned with an argument array (no shell) and `--` before the URL. `RELAY_KEY` is required for anything public.
 
 ## Code
 

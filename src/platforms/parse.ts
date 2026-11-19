@@ -119,19 +119,23 @@ const SEEKABLE: Record<PlatformId, (kind: SourceKind) => boolean> = {
   iframe: () => false,
 }
 
-export function capabilities(source: Source): Capabilities {
+/**
+ * What Regie can do with a source's player. `relayed`: the tile plays through the viewer's relay, in a
+ * `<video>` Regie controls fully (sound, seek, latency); the chats don't change.
+ */
+export function capabilities(source: Source, relayed = false): Capabilities {
   const { platform, kind } = source
   const controllable = platform === 'twitch' || platform === 'youtube' || platform === 'video' || platform === 'tiktok'
   return {
-    volume: platform === 'twitch' || platform === 'youtube' || platform === 'video' || platform === 'vimeo',
-    mute: controllable || platform === 'kick' || platform === 'vimeo' || platform === 'dailymotion',
-    seek: kind !== 'unembeddable' && kind !== 'clip' && SEEKABLE[platform](kind),
+    volume: relayed || platform === 'twitch' || platform === 'youtube' || platform === 'video' || platform === 'vimeo',
+    mute: relayed || controllable || platform === 'kick' || platform === 'vimeo' || platform === 'dailymotion',
+    seek: relayed || (kind !== 'unembeddable' && kind !== 'clip' && SEEKABLE[platform](kind)),
     chat:
       (platform === 'twitch' && kind === 'live') ||
       (platform === 'youtube' && source.id.length === 11) ||
       platform === 'kick',
     liveChat: platform === 'twitch' && kind === 'live',
-    latency: platform === 'twitch' && kind === 'live',
+    latency: kind === 'live' && (relayed || platform === 'twitch'),
     aspect: platform === 'tiktok' ? 9 / 16 : 16 / 9,
   }
 }

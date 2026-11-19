@@ -213,5 +213,20 @@ export const fr: Record<MessageKey, string> = {
   'help.adReload': 'Recharger un player qui passe en pub',
   'help.adReloadHint':
     'Désactivé par défaut : un rechargement coupe le stream quelques secondes. Activé, seulement pour une pub confirmée en cours de stream : un player neuf revient parfois sans. Une fois toutes les cinq minutes au plus, et si le player neuf retombe sur une pub, les pubs de ce stream passent normalement pendant un moment.',
+  'relay.title': 'Relais sans pub',
+  'relay.text':
+    'Facultatif. Un petit serveur que vous lancez vous-même lit les streams Twitch, YouTube et Kick sans leurs pubs, avec le contrôle complet du son et du seek : les lives Twitch et Kick peuvent alors être synchronisés eux aussi. Les autres liens gardent leur player officiel, et sans relais Regie marche comme d’habitude.',
+  'relay.url': 'Adresse du relais',
+  'relay.key': 'Clé (facultative)',
+  'relay.run':
+    'Lancez {command} sur votre ordinateur (voir le README), puis indiquez son adresse. Gardé dans ce navigateur uniquement, jamais dans un lien partagé.',
+  'relay.off': 'Désactivé : les players officiels sont utilisés',
+  'relay.checking': 'Vérification…',
+  'relay.up': 'Connecté',
+  'relay.down': 'Injoignable : les players officiels sont utilisés',
+  'relay.invalid': 'Ce n’est pas une adresse web',
+  'relay.noFfmpeg': 'Pas de ffmpeg sur le relais : les vidéos YouTube gardent leur player officiel',
+  'tile.badgeHls': 'HLS',
+  'tile.hlsHint': 'Lu via votre relais, sans pub',
   'drop.hint': 'Lâchez le lien pour ajouter le stream',
 }

@@ -23,11 +23,13 @@ import {
   TAKEOVER_MS,
   TAKEOVER_SPIKE,
 } from '../core/hype.ts'
+import { normalizeRelayBase, type RelayStatus, relayable } from '../core/relay.ts'
 import { decodeSession, defaultSession, encodeSession, newTile } from '../core/session.ts'
 import { chatHold, planSync } from '../core/sync.ts'
-import type { AudioMode, LayoutMode, Session, Source, Tile } from '../core/types.ts'
+import type { AudioMode, Capabilities, LayoutMode, Session, Source, Tile } from '../core/types.ts'
 import { type Creator, kickChannel, twitchChannels } from '../platforms/directory.ts'
 import { capabilities, sourceName } from '../platforms/parse.ts'
+import { relayHealth } from '../platforms/relay.ts'
 import { fetchTitle } from '../platforms/titles.ts'
 import { createPlayer, type PlaybackState, type Player } from '../players/index.ts'
 import { canPlayWithSound } from '../players/load-script.ts'
@@ -88,6 +90,10 @@ const IDLE_AFTER_MS = 3000
 const RESUME_EVERY_MS = 5000
 const MAX_CHAT = 400
 const FADE_MS = 600
+/** At startup, how long players the relay could take wait for its first answer before mounting their embed. */
+const RELAY_WAIT_MS = 1500
+/** How often an unreachable relay is asked again. */
+const RELAY_RETRY_MS = 30_000
 
 type Events = { change: Event; chat: Event; tick: Event }
 
@@ -119,6 +125,14 @@ export class Store extends TypedEventTarget<Events> {
     liveAlerts: [] as Creator[],
     toast: null as string | null,
   }
+  /** The viewer's own relay (`bun run relay`), saved in this browser only: where it is and whether it answers. */
+  relay = {
+    url: '',
+    key: '',
+    status: 'off' as RelayStatus,
+    ytdlp: null as string | null,
+    ffmpeg: null as string | null,
+  }
   chatLog: ChatMessage[] = []
   #pending: (ChatMessage & { release: number })[] = []
   #chat = new TwitchChat()
@@ -144,6 +158,11 @@ export class Store extends TypedEventTarget<Events> {
   // ----- lifecycle -----
 
   start() {
+    const relay = library.relaySettings()
+    this.#useRelay(relay.url, relay.key, true)
+    setInterval(() => {
+      if (this.relay.status === 'down' && normalizeRelayBase(this.relay.url)) this.#checkRelay()
+    }, RELAY_RETRY_MS)
     this.loadHash(location.hash)
     window.addEventListener('hashchange', () => {
       if (location.hash.replace(/^#/, '') !== this.#lastHash) this.loadHash(location.hash)
@@ -268,6 +287,8 @@ export class Store extends TypedEventTarget<Events> {
     this.#unfitted.clear()
     this.#reloads.clear()
     this.#blocked.clear()
+    this.#relayFailed.clear()
+    this.#deferred.clear()
     this.#warmQueue = []
     this.ui.warmup = null
     this.session = decodeSession(hash, this.#base())
@@ -350,16 +371,34 @@ export class Store extends TypedEventTarget<Events> {
     const tile = this.tile(id)
     if (!tile || this.players.has(id)) return
     this.#containers.set(id, container)
+    // Mounting the embed now would mean reloading it in a moment if the relay answers.
+    if (this.#relayGate && relayable(tile.source)) {
+      this.#deferred.add(id)
+      return
+    }
+    const target = this.#relayTarget(tile)
     const player = createPlayer({
       source: tile.source,
       container,
       host: this.#host,
       initialVolume: this.ui.soundAllowed ? (this.#targetVolumes()[id] ?? 0) : 0,
+      relay: target
+        ? {
+            base: normalizeRelayBase(this.relay.url) ?? '',
+            key: this.relay.key,
+            remux: this.relay.ffmpeg !== null,
+            // Called from the player's own callbacks: it is replaced once they have returned.
+            onFail: () => setTimeout(() => this.#fallBack(id, player), 0),
+          }
+        : undefined,
       events: {
         state: (state, byPlayer) => {
           const runtime = this.runtime.get(id)
           if (!runtime) return
           runtime.state = state
+          // A relayed stream that stops for good may mean the relay itself is gone: ask it again, and if it
+          // doesn't answer, the official players take over.
+          if (state === 'offline' && this.#relayed.has(id) && this.relay.status === 'up') this.#checkRelay()
           runtime.pausedAt = state === 'paused' ? (runtime.pausedAt ?? Date.now()) : undefined
           if (state === 'paused') {
             // Clicking inside a player moves the focus into its iframe: a pause from there is the viewer's.
@@ -377,7 +416,10 @@ export class Store extends TypedEventTarget<Events> {
         progress: (time) => this.#adSignal(id, { type: 'progress', time }, false),
         latency: (seconds) => {
           const runtime = this.runtime.get(id)
-          if (runtime) runtime.latency = seconds
+          if (!runtime) return
+          // Through the relay, the latency is measured where the video plays, Regie's own delay included.
+          const delay = this.#relayed.has(id) ? (this.tile(id)?.delay ?? 0) : 0
+          runtime.latency = Math.max(0, seconds - delay)
         },
         userVolume: (volume, muted) => this.#fromPlayer(id, volume, muted),
         adHint: (on) => {
@@ -398,6 +440,7 @@ export class Store extends TypedEventTarget<Events> {
     })
     if (player) {
       this.players.set(id, player)
+      if (target) this.#relayed.set(id, target)
       this.#applied.set(id, 0)
       const runtime = this.runtime.get(id)
       if (runtime) {
@@ -428,7 +471,14 @@ export class Store extends TypedEventTarget<Events> {
 
   warmUp(id: string) {
     const runtime = this.runtime.get(id)
-    if (!runtime || runtime.played || this.#warmQueue.includes(id) || this.ui.warmup?.id === id) return
+    if (
+      !runtime ||
+      !this.embedTwitch(id) ||
+      runtime.played ||
+      this.#warmQueue.includes(id) ||
+      this.ui.warmup?.id === id
+    )
+      return
     this.#warmQueue.push(id)
     runtime.chanceAt = undefined
     if (!this.ui.warmup) this.#nextWarmup()
@@ -451,7 +501,7 @@ export class Store extends TypedEventTarget<Events> {
     const starting = this.session.tiles.some((tile) => {
       const runtime = this.runtime.get(tile.id)
       return (
-        tile.source.platform === 'twitch' &&
+        this.embedTwitch(tile.id) &&
         tile.id !== finished &&
         tile.id !== this.ui.warmup?.id &&
         runtime?.chanceAt !== undefined &&
@@ -511,7 +561,7 @@ export class Store extends TypedEventTarget<Events> {
   #watchAd(id: string, on: boolean) {
     clearTimeout(this.#adTimers.get(id))
     this.#adTimers.delete(id)
-    if (!on || !this.session.adReload || this.tile(id)?.source.platform !== 'twitch') return
+    if (!on || !this.session.adReload || !this.embedTwitch(id)) return
     this.#adTimers.set(
       id,
       setTimeout(() => {
@@ -529,19 +579,148 @@ export class Store extends TypedEventTarget<Events> {
 
   /** Mounts a tile's player again, in place. */
   reloadPlayer(id: string) {
+    if (!this.players.has(id)) return
+    this.#remount(id)
+    this.changed(false)
+  }
+
+  /** Destroys a tile's player and mounts a fresh one in the same container: the tile's node never moves. */
+  #remount(id: string) {
     const container = this.#containers.get(id)
     const runtime = this.runtime.get(id)
-    if (!container || !runtime || !this.players.has(id)) return
+    if (!container || !runtime) return
     this.#detach(id)
     runtime.ad = initialAdState(Date.now())
     runtime.played = false
     runtime.watchedAt = undefined
     runtime.retried = false
+    runtime.latency = undefined
     runtime.state = 'loading'
+    // A fresh player starts where its platform starts it: Regie's delay is gone.
+    const tile = this.tile(id)
+    if (tile) tile.delay = 0
     this.attach(id, container)
     // A small monitor needs its line check again to start (Twitch only autoplays large players).
-    if (this.tile(id)?.source.platform === 'twitch' && this.#small.has(id)) this.warmUp(id)
+    if (this.#small.has(id)) this.warmUp(id)
+  }
+
+  // ----- relay -----
+
+  /** Tiles playing through the relay, with the relay they were mounted on (`#relayTarget`). */
+  #relayed = new Map<string, string>()
+  /** Tiles whose stream didn't start on the relay: they keep their official player. */
+  #relayFailed = new Set<string>()
+  /** At startup, the players the relay could take wait for its first answer (`RELAY_WAIT_MS` at most). */
+  #relayGate = false
+  #relayGateTimer: ReturnType<typeof setTimeout> | undefined
+  #deferred = new Set<string>()
+  /** Only the latest health check counts. */
+  #relayCheck = 0
+
+  /** Changes the relay settings (help sheet) and asks the new relay. */
+  setRelay(url: string, key: string) {
+    const nextKey = key.trim()
+    const nextUrl = normalizeRelayBase(url) ?? url.trim()
+    if (nextUrl === this.relay.url && nextKey === this.relay.key) return
+    library.saveRelay(nextUrl, nextKey)
+    this.#relayFailed.clear()
+    this.#useRelay(nextUrl, nextKey, false)
+  }
+
+  /** Reads the relay settings again, after a backup was imported. */
+  loadRelaySettings() {
+    const { url, key } = library.relaySettings()
+    if (url === this.relay.url && key === this.relay.key) return
+    this.#relayFailed.clear()
+    this.#useRelay(url, key, false)
+  }
+
+  /** A Twitch tile on its official embed: it needs 400×300 and a line check, and its ads are only covered. */
+  embedTwitch(id: string): boolean {
+    return this.tile(id)?.source.platform === 'twitch' && !this.#relayed.has(id) && !this.#deferred.has(id)
+  }
+
+  /** The tile plays through the viewer's relay. */
+  relayed(id: string): boolean {
+    return this.#relayed.has(id)
+  }
+
+  /** What Regie can do with a tile's player, which depends on whether it plays through the relay. */
+  caps(tile: Tile): Capabilities {
+    return capabilities(tile.source, this.#relayed.has(tile.id))
+  }
+
+  #useRelay(url: string, key: string, startup: boolean) {
+    this.relay = { url, key, status: 'off', ytdlp: null, ffmpeg: null }
+    this.#relayCheck++
+    if (startup && !url) return
+    if (!url || normalizeRelayBase(url) === null) {
+      this.relay.status = url ? 'down' : 'off'
+      this.#settleRelay()
+      return
+    }
+    this.relay.status = 'checking'
+    if (startup) {
+      this.#relayGate = true
+      this.#relayGateTimer = setTimeout(() => this.#openGate(), RELAY_WAIT_MS)
+    }
+    this.#emit('change')
+    this.#checkRelay()
+  }
+
+  async #checkRelay() {
+    const base = normalizeRelayBase(this.relay.url)
+    if (!base) return
+    const token = ++this.#relayCheck
+    const health = await relayHealth(base, this.relay.key)
+    if (token !== this.#relayCheck) return
+    const status: RelayStatus = health ? 'up' : 'down'
+    if (status === this.relay.status && !this.#relayGate) return
+    this.relay.status = status
+    this.relay.ytdlp = health?.ytdlp ?? null
+    this.relay.ffmpeg = health?.ffmpeg ?? null
+    this.#settleRelay()
+  }
+
+  /** The relay answered (or was turned off): only the tiles it changes are mounted again, once. */
+  #settleRelay() {
+    this.#openGate()
+    for (const id of [...this.players.keys()]) {
+      const tile = this.tile(id)
+      if (tile && (this.#relayed.get(id) ?? '') !== this.#relayTarget(tile)) this.#remount(id)
+    }
     this.changed(false)
+  }
+
+  /** The relay a tile should play from (address and key), or '' for its official player. */
+  #relayTarget(tile: Tile): string {
+    const base = normalizeRelayBase(this.relay.url)
+    if (this.relay.status !== 'up' || !base || this.#relayFailed.has(tile.id)) return ''
+    return relayable(tile.source, this.relay.ffmpeg !== null) ? `${base}#${this.relay.key}` : ''
+  }
+
+  /** Mounts the players that waited for the relay's first answer. */
+  #openGate() {
+    if (!this.#relayGate) return
+    this.#relayGate = false
+    clearTimeout(this.#relayGateTimer)
+    for (const id of [...this.#deferred]) {
+      this.#deferred.delete(id)
+      const container = this.#containers.get(id)
+      if (!container || !this.tile(id) || this.players.has(id)) continue
+      this.attach(id, container)
+      if (this.#small.has(id)) this.warmUp(id)
+    }
+    this.changed(false)
+  }
+
+  /** The stream never started on the relay: the tile gets its official player, in the same container. */
+  #fallBack(id: string, player: Player | null) {
+    if (!player || this.players.get(id) !== player) return
+    this.#relayFailed.add(id)
+    this.#remount(id)
+    this.changed(false)
+    if (this.relay.status === 'up') this.#checkRelay()
   }
 
   setAdReload(on: boolean) {
@@ -582,14 +761,18 @@ export class Store extends TypedEventTarget<Events> {
 
   #forget(id: string) {
     this.#containers.delete(id)
+    this.#relayFailed.delete(id)
+    this.#deferred.delete(id)
     this.#reloads.delete(id)
     this.#fits.delete(id)
     this.#unfitted.delete(id)
   }
 
   #detach(id: string) {
-    this.players.get(id)?.destroy()
+    const player = this.players.get(id)
+    if (player) safely(() => player.destroy())
     this.players.delete(id)
+    this.#relayed.delete(id)
     this.#applied.delete(id)
     this.#resend.delete(id)
     clearTimeout(this.#adTimers.get(id))
@@ -644,6 +827,8 @@ export class Store extends TypedEventTarget<Events> {
     this.#unfitted.clear()
     this.#reloads.clear()
     this.#blocked.clear()
+    this.#relayFailed.clear()
+    this.#deferred.clear()
     this.#warmQueue = []
     this.ui.warmup = null
     this.session = { ...this.#base(), master: this.session.master }
@@ -783,7 +968,7 @@ export class Store extends TypedEventTarget<Events> {
    * refused restart). Its sound goes to a stream that plays. Wall paused with Regie's key: nothing moves.
    */
   #idle(tile: Tile, runtime: TileRuntime | undefined, now: number): boolean {
-    if (!runtime || tile.source.platform !== 'twitch' || this.#holding) return false
+    if (!runtime || !this.embedTwitch(tile.id) || this.#holding) return false
     if (runtime.state === 'offline' || runtime.state === 'ended') return true
     if (!runtime.played) return runtime.chanceAt !== undefined && now - runtime.chanceAt >= IDLE_AFTER_MS
     return (
@@ -798,10 +983,10 @@ export class Store extends TypedEventTarget<Events> {
     return this.mix().volumes
   }
 
-  /** Twitch tiles in an ad, for the notice that explains why they are shown large. */
+  /** Twitch tiles in an ad on their embed, for the notice that explains why they are shown large. */
   twitchAds(): string[] {
     return this.session.tiles
-      .filter((tile) => tile.source.platform === 'twitch' && this.runtime.get(tile.id)?.ad.inAd)
+      .filter((tile) => this.embedTwitch(tile.id) && this.runtime.get(tile.id)?.ad.inAd)
       .map((tile) => tile.id)
   }
 
@@ -817,7 +1002,7 @@ export class Store extends TypedEventTarget<Events> {
   boostCandidate(small: (id: string) => boolean): string | null {
     if (this.ui.warmup && small(this.ui.warmup.id)) return this.ui.warmup.id
     const inAd = this.session.tiles.find(
-      (tile) => tile.source.platform === 'twitch' && this.runtime.get(tile.id)?.ad.inAd && small(tile.id),
+      (tile) => this.embedTwitch(tile.id) && this.runtime.get(tile.id)?.ad.inAd && small(tile.id),
     )
     return inAd?.id ?? null
   }
@@ -866,8 +1051,8 @@ export class Store extends TypedEventTarget<Events> {
       const to = fade.to[id] ?? 0
       if (from === to) continue
       // Players that can only mute (Kick) switch once, at the end, instead of reloading on every step.
-      const caps = capabilities(this.tile(id)?.source ?? { platform: 'iframe', kind: 'live', id: '' })
-      if (!caps.volume) {
+      const tile = this.tile(id)
+      if (!tile || !this.caps(tile).volume) {
         if (progress === 1) this.#setVolume(id, player, to)
         continue
       }
@@ -901,7 +1086,7 @@ export class Store extends TypedEventTarget<Events> {
     for (const [id, runtime] of this.runtime) {
       if (runtime.state !== 'paused' || !runtime.played || runtime.pausedAt === undefined) continue
       if (now - runtime.pausedAt < RESUME_AFTER_MS || now - (runtime.resumedAt ?? 0) < RESUME_EVERY_MS) continue
-      if (this.tile(id)?.source.platform !== 'twitch') continue
+      if (!this.embedTwitch(id)) continue
       const container = this.#containers.get(id)
       if (fullscreen && container && !fullscreen.contains(container)) continue
       const player = this.players.get(id)
@@ -963,7 +1148,7 @@ export class Store extends TypedEventTarget<Events> {
       this.session.tiles.map((tile) => ({
         id: tile.id,
         mark: this.runtime.get(tile.id)?.mark,
-        canDelay: capabilities(tile.source).seek && this.players.has(tile.id),
+        canDelay: this.caps(tile).seek && this.players.has(tile.id),
         delay: tile.delay,
       })),
     )
@@ -993,7 +1178,7 @@ export class Store extends TypedEventTarget<Events> {
     const tile = this.tile(id)
     if (!tile) return
     const next = Math.max(0, Math.round((tile.delay + seconds) * 100) / 100)
-    if (capabilities(tile.source).seek && safely(() => this.players.get(tile.id)?.seekBy(-(next - tile.delay)))) {
+    if (this.caps(tile).seek && safely(() => this.players.get(tile.id)?.seekBy(-(next - tile.delay)))) {
       tile.delay = next
     } else {
       // A stream Regie cannot seek only records its lead, which holds its chat back.
@@ -1049,7 +1234,7 @@ export class Store extends TypedEventTarget<Events> {
   }
 
   chatTiles(): Tile[] {
-    return this.session.tiles.filter((tile) => capabilities(tile.source).chat)
+    return this.session.tiles.filter((tile) => this.caps(tile).chat)
   }
 
   twitchTile(channel: string): Tile | undefined {
@@ -1060,7 +1245,7 @@ export class Store extends TypedEventTarget<Events> {
 
   #syncChat() {
     const channels = this.session.liveChat
-      ? this.session.tiles.filter((tile) => capabilities(tile.source).liveChat).map((tile) => tile.source.id)
+      ? this.session.tiles.filter((tile) => this.caps(tile).liveChat).map((tile) => tile.source.id)
       : []
     this.#chat.setChannels(channels)
   }
@@ -1097,7 +1282,7 @@ export class Store extends TypedEventTarget<Events> {
     const tile = this.tile(id)
     const runtime = this.runtime.get(id)
     if (!tile || runtime?.chanceAt === undefined || runtime.played || runtime.state === 'offline') return false
-    if (tile.source.platform !== 'twitch' && tile.source.platform !== 'youtube') return false
+    if (this.#relayed.has(id) || (tile.source.platform !== 'twitch' && tile.source.platform !== 'youtube')) return false
     return Date.now() - runtime.chanceAt > 8000
   }
 
@@ -1109,7 +1294,7 @@ export class Store extends TypedEventTarget<Events> {
   adblocked(id: string): boolean {
     const tile = this.tile(id)
     const runtime = this.runtime.get(id)
-    if (!tile || !runtime || tile.source.platform !== 'twitch') return false
+    if (!tile || !runtime || !this.embedTwitch(id)) return false
     return adblockSuspect(
       {
         since: runtime.chanceAt,
@@ -1123,9 +1308,7 @@ export class Store extends TypedEventTarget<Events> {
 
   /** Twitch tiles that look blocked by the viewer's ad blocker, for the notice under the wall. */
   adblockedTiles(): string[] {
-    return this.session.tiles
-      .filter((tile) => tile.source.platform === 'twitch' && this.adblocked(tile.id))
-      .map((tile) => tile.id)
+    return this.session.tiles.filter((tile) => this.adblocked(tile.id)).map((tile) => tile.id)
   }
 
   meter(id: string): number {

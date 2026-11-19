@@ -33,4 +33,9 @@ export interface PlayerContext {
   events: PlayerEvents
   /** Volume to start with, so autoplay is muted until the page has had a user gesture. */
   initialVolume: number
+  /**
+   * The viewer's relay, when it is up: a source it supports plays from it in a `<video>`. `remux`: it can
+   * remux YouTube videos. `onFail`: the stream never started there, so the official embed takes over.
+   */
+  relay?: { base: string; key: string; remux: boolean; onFail(): void }
 }

@@ -5,7 +5,7 @@ import type { Store } from '../app/store.ts'
 import { type ChatMessage, emoteUrl, segments } from '../chat/irc.ts'
 import { t } from '../i18n/index.ts'
 import { chatUrl } from '../platforms/embed.ts'
-import { capabilities, sourceName } from '../platforms/parse.ts'
+import { sourceName } from '../platforms/parse.ts'
 import { switchStyle } from './controls.tsx'
 import { Icon } from './Icon.tsx'
 
@@ -142,7 +142,7 @@ function MergedLog(handle: Handle<{ store: Store }>) {
 
   return () => {
     const { session } = store
-    const channels = session.tiles.filter((tile) => capabilities(tile.source).liveChat).map((tile) => tile.source.id)
+    const channels = session.tiles.filter((tile) => store.caps(tile).liveChat).map((tile) => tile.source.id)
     const words = session.keywords.map((word) => word.toLowerCase())
     const hit = (message: ChatMessage) => words.some((word) => message.text.toLowerCase().includes(word))
     const color = (channel: string) => CHANNEL_COLORS[Math.max(0, channels.indexOf(channel)) % CHANNEL_COLORS.length]

@@ -37,6 +37,10 @@ export interface Preferences {
   autoAdd: boolean
   /** The session's `adReload`. */
   reloadAds: boolean
+  /** Address of the viewer's relay. Specific to this machine: kept here, never in a shared link. */
+  relayUrl: string
+  /** The relay's optional key. */
+  relayKey: string
 }
 
 export interface Backup {
@@ -139,6 +143,19 @@ export function preferences(): Partial<Preferences> {
   return read<Partial<Preferences>>(KEYS.preferences, {})
 }
 
+/** The relay settings saved in this browser. */
+export function relaySettings(): { url: string; key: string } {
+  const { relayUrl, relayKey } = preferences()
+  return {
+    url: typeof relayUrl === 'string' ? relayUrl.slice(0, 500) : '',
+    key: typeof relayKey === 'string' ? relayKey.slice(0, 500) : '',
+  }
+}
+
+export function saveRelay(url: string, key: string) {
+  write(KEYS.preferences, { ...preferences(), relayUrl: url, relayKey: key })
+}
+
 export function savePreferences(session: Session) {
   const {
     audioMode,
@@ -165,11 +182,21 @@ export function savePreferences(session: Session) {
     keywords,
     autoAdd,
     reloadAds: adReload,
+    // Not part of the session: kept as they are.
+    ...relayPreferences(),
   })
 }
 
+function relayPreferences(): Partial<Preferences> {
+  const { url, key } = relaySettings()
+  return url || key ? { relayUrl: url, relayKey: key } : {}
+}
+
+/** Forgets the default settings. The relay is this machine's setup, not a preference: it stays. */
 export function clearPreferences() {
+  const relay = relayPreferences()
   localStorage.removeItem(KEYS.preferences)
+  if (Object.keys(relay).length) write(KEYS.preferences, relay)
 }
 
 export function exportBackup(): Backup {
@@ -216,7 +243,9 @@ export function importBackup(data: unknown): number | null {
     if (isSource(recent?.source) && !merged.some((r) => sameSource(r.source, recent.source))) merged.push(recent)
   }
   write(KEYS.recents, merged.sort((a, b) => b.at - a.at).slice(0, MAX_RECENTS))
-  if (backup.preferences && typeof backup.preferences === 'object') write(KEYS.preferences, backup.preferences)
+  // A backup without relay settings keeps this browser's relay.
+  if (backup.preferences && typeof backup.preferences === 'object')
+    write(KEYS.preferences, { ...relayPreferences(), ...backup.preferences })
   if (backup.locale === 'en' || backup.locale === 'fr') localStorage.setItem(KEYS.locale, backup.locale)
   return count
 }

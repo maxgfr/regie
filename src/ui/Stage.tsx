@@ -5,7 +5,7 @@ import { isFavorite } from '../app/library.ts'
 import type { Store } from '../app/store.ts'
 import { computeLayout, minimumScale, type Placed } from '../core/layout.ts'
 import { seconds, t } from '../i18n/index.ts'
-import { capabilities, platformLabel, sourcePage } from '../platforms/parse.ts'
+import { platformLabel, sourcePage } from '../platforms/parse.ts'
 import { TWITCH_MIN_HEIGHT, TWITCH_MIN_WIDTH } from '../players/twitch.ts'
 import { Icon } from './Icon.tsx'
 
@@ -54,7 +54,7 @@ export function Stage(handle: Handle<{ store: Store }>) {
   return () => {
     const { session } = store
     const focus = store.effectiveFocus()
-    const layoutTiles = session.tiles.map((tile) => ({ id: tile.id, aspect: capabilities(tile.source).aspect }))
+    const layoutTiles = session.tiles.map((tile) => ({ id: tile.id, aspect: store.caps(tile).aspect }))
     const layout = (boostId: string | null) =>
       computeLayout({
         tiles: layoutTiles,
@@ -192,6 +192,11 @@ const umdStyle = css({
   '& .tag[data-kind="ad"]': { background: 'var(--amber)', color: '#1a1000' },
   '& .tag[data-kind="hype"]': { background: 'var(--text)', color: '#000' },
   '& .tag[data-kind="offline"]': { background: 'var(--key)', color: 'var(--dim)' },
+  '& .tag[data-kind="hls"]': {
+    background: 'transparent',
+    color: 'var(--dim)',
+    boxShadow: 'inset 0 0 0 1px var(--line)',
+  },
   '& .tag[data-kind="start"], & .tag[data-kind="adblock"]': {
     background: 'transparent',
     color: 'var(--amber)',
@@ -244,7 +249,7 @@ function Meter(handle: Handle<{ store: Store; id: string }>) {
   store.addEventListener('tick', () => handle.update(), { signal: handle.signal })
   return () => {
     const tile = store.tile(id)
-    if (!store.session.liveChat || !tile || !capabilities(tile.source).liveChat) return null
+    if (!store.session.liveChat || !tile || !store.caps(tile).liveChat) return null
     const lit = Math.round(store.meter(id) * 10)
     return (
       <span mix={meterStyle} title={t('tile.badgeHype')} aria-hidden="true" data-optional>
@@ -358,15 +363,14 @@ function TileView(handle: Handle<TileProps>) {
     const tile = store.tile(id)
     if (!tile) return <article mix={tileStyle} data-hidden="true" />
     const runtime = store.runtime.get(id)
-    const caps = capabilities(tile.source)
+    const caps = store.caps(tile)
     const box = rect ?? { x: 0, y: 0, w: 0, h: 0, overlay: false }
     const screenW = box.w
     const screenH = Math.max(0, box.h - UMD)
-    // Twitch refuses to play below 400×300: render it at that size and scale it down.
-    const scale =
-      tile.source.platform === 'twitch'
-        ? minimumScale({ x: 0, y: 0, w: screenW, h: screenH }, TWITCH_MIN_WIDTH, TWITCH_MIN_HEIGHT)
-        : 1
+    // Twitch's embed refuses to play below 400×300: render it at that size and scale it down.
+    const scale = store.embedTwitch(id)
+      ? minimumScale({ x: 0, y: 0, w: screenW, h: screenH }, TWITCH_MIN_WIDTH, TWITCH_MIN_HEIGHT)
+      : 1
     const tally = onAir ? 'pgm' : main ? 'pvw' : 'none'
     const inAd = runtime?.ad.inAd ?? false
     const name = store.label(id)
@@ -401,7 +405,7 @@ function TileView(handle: Handle<TileProps>) {
         attached = true
         store.attach(id, screen)
         // Twitch only autoplays at 400×300 or more: a smaller monitor gets a line check first.
-        if (tile.source.platform === 'twitch' && store.isSmall(id)) store.warmUp(id)
+        if (store.embedTwitch(id) && store.isSmall(id)) store.warmUp(id)
         handle.update()
       })
     }
@@ -518,6 +522,11 @@ function TileView(handle: Handle<TileProps>) {
             {inAd && (
               <span class="tag" data-kind="ad">
                 {t('tile.badgeAd')}
+              </span>
+            )}
+            {store.relayed(id) && (
+              <span class="tag" data-kind="hls" data-optional title={t('tile.hlsHint')}>
+                {t('tile.badgeHls')}
               </span>
             )}
             {(runtime?.state === 'offline' || (info && !info.live)) && (

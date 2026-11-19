@@ -3,7 +3,7 @@ import type { Handle } from 'remix/component'
 import { css, on, ref } from 'remix/component'
 import type { Store } from '../app/store.ts'
 import { isMessageKey, t } from '../i18n/index.ts'
-import { capabilities, parseSource } from '../platforms/parse.ts'
+import { parseSource } from '../platforms/parse.ts'
 import { ChatDock } from './ChatDock.tsx'
 import { Console } from './Console.tsx'
 import { keyStyle } from './controls.tsx'
@@ -153,7 +153,7 @@ function SyncBar(handle: Handle<{ store: Store }>) {
   const { store } = handle.props
   return () => {
     const marks = store.marks()
-    const fixed = store.session.tiles.filter((tile) => !capabilities(tile.source).seek).length
+    const fixed = store.session.tiles.filter((tile) => !store.caps(tile).seek).length
     return (
       <section aria-labelledby="sync-title" mix={syncBarStyle}>
         <h2 id="sync-title">

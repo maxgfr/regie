@@ -2,6 +2,7 @@ import { X } from 'lucide'
 import type { Handle } from 'remix/component'
 import { css, on } from 'remix/component'
 import type { Store } from '../app/store.ts'
+import { normalizeRelayBase } from '../core/relay.ts'
 import { type Locale, locale, type MessageKey, setLocale, t } from '../i18n/index.ts'
 import { keyStyle, switchStyle } from './controls.tsx'
 import { Icon } from './Icon.tsx'
@@ -107,6 +108,142 @@ const KEYS: [string, MessageKey][] = [
   ['?', 'help.k.help'],
 ]
 
+const relayStyle = css({
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 2fr)',
+  gap: '8px',
+  margin: '10px 0 8px',
+  '& label': { display: 'grid', gap: '4px', minWidth: 0 },
+  '& label > span': { color: 'var(--dim)', fontSize: '13px' },
+  '& input': {
+    minWidth: 0,
+    height: '32px',
+    padding: '0 10px',
+    border: '1px solid #000',
+    borderRadius: '4px',
+    background: '#0c0d0e',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '13px',
+  },
+  '& .status': {
+    gridColumn: '1 / -1',
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '8px',
+    color: 'var(--dim)',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '12px',
+    fontVariantNumeric: 'tabular-nums',
+    lineHeight: 1.4,
+  },
+  // A lamp next to the words, like a console status light: the state is always written too.
+  '& .status::before': {
+    content: '""',
+    flex: 'none',
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+    background: 'var(--line)',
+    transform: 'translateY(-1px)',
+  },
+  '& .status[data-status="up"]': { color: 'var(--pvw)' },
+  '& .status[data-status="up"]::before': { background: 'var(--pvw)' },
+  '& .status[data-status="down"]': { color: 'var(--amber)' },
+  '& .status[data-status="down"]::before': { background: 'var(--amber)' },
+  '& .status small': { display: 'block', color: 'var(--dim)', fontFamily: 'var(--font-ui)', fontSize: '13px' },
+})
+
+const commandStyle = css({
+  padding: '1px 5px',
+  borderRadius: '3px',
+  background: 'var(--key)',
+  color: 'var(--text)',
+  fontFamily: 'var(--font-mono)',
+  fontSize: '12px',
+  whiteSpace: 'nowrap',
+})
+
+/** The address and key of the viewer's relay, and whether it answers. Saved when a field is committed. */
+function RelaySettings(handle: Handle<{ store: Store }>) {
+  const { store } = handle.props
+  let url = store.relay.url
+  let key = store.relay.key
+  let seen = `${url}\n${key}`
+  const commit = () => store.setRelay(url, key)
+  return () => {
+    const { relay } = store
+    // Settings changed elsewhere (a backup import): show them.
+    if (`${relay.url}\n${relay.key}` !== seen) {
+      seen = `${relay.url}\n${relay.key}`
+      url = relay.url
+      key = relay.key
+    }
+    const invalid = relay.status === 'down' && normalizeRelayBase(relay.url) === null
+    const status =
+      relay.status === 'up'
+        ? [t('relay.up'), relay.ytdlp && `yt-dlp ${relay.ytdlp}`, relay.ffmpeg && `ffmpeg ${relay.ffmpeg}`]
+            .filter(Boolean)
+            .join(' · ')
+        : relay.status === 'checking'
+          ? t('relay.checking')
+          : relay.status === 'down'
+            ? t(invalid ? 'relay.invalid' : 'relay.down')
+            : t('relay.off')
+    const [before, after] = t('relay.run').split('{command}')
+    return (
+      <div>
+        <p>{t('relay.text')}</p>
+        <fieldset mix={relayStyle}>
+          <legend class="sr-only">{t('relay.title')}</legend>
+          <label>
+            <span>{t('relay.url')}</span>
+            <input
+              type="text"
+              inputMode="url"
+              autocomplete="off"
+              spellcheck={false}
+              placeholder="http://localhost:7878"
+              value={url}
+              mix={[
+                on('input', (event) => {
+                  url = event.currentTarget.value
+                }),
+                on('change', commit),
+              ]}
+            />
+          </label>
+          <label>
+            <span>{t('relay.key')}</span>
+            <input
+              type="password"
+              autocomplete="off"
+              spellcheck={false}
+              value={key}
+              mix={[
+                on('input', (event) => {
+                  key = event.currentTarget.value
+                }),
+                on('change', commit),
+              ]}
+            />
+          </label>
+          <p class="status" data-status={relay.status} role="status">
+            <span>
+              {status}
+              {relay.status === 'up' && !relay.ffmpeg && <small>{t('relay.noFfmpeg')}</small>}
+            </span>
+          </p>
+        </fieldset>
+        <p class="note">
+          {before}
+          <code mix={commandStyle}>bun run relay</code>
+          {after}
+        </p>
+      </div>
+    )
+  }
+}
+
 export function HelpSheet(handle: Handle<{ store: Store }>) {
   const { store } = handle.props
   const close = () => {
@@ -146,6 +283,8 @@ export function HelpSheet(handle: Handle<{ store: Store }>) {
         </span>
       </label>
       <p>{t('help.adsText')}</p>
+      <h3>{t('relay.title')}</h3>
+      <RelaySettings store={store} />
       <h3>{t('help.background')}</h3>
       <p>{t('help.backgroundText')}</p>
       <h3>{t('help.platforms')}</h3>

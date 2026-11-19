@@ -205,6 +205,21 @@ export const en = {
   'help.adReload': 'Reload a player that goes to an ad',
   'help.adReloadHint':
     'Off by default: a reload cuts the stream for a few seconds. When on, only for a confirmed mid-roll: a fresh player sometimes comes back without it. Once every five minutes at most, and if the fresh player opens on an ad again, the ads of that stream simply play for a while.',
+  'relay.title': 'Ad-free relay',
+  'relay.text':
+    'Optional. A small server you run yourself plays Twitch, YouTube and Kick streams without their ads, with full sound and seek control, so Twitch and Kick lives can be lined up too. Other links keep their official player, and without a relay Regie works as usual.',
+  'relay.url': 'Relay address',
+  'relay.key': 'Key (optional)',
+  'relay.run':
+    'Run {command} on your computer (see the README), then enter its address. Kept in this browser only, never in a shared link.',
+  'relay.off': 'Off: official players are used',
+  'relay.checking': 'Checking…',
+  'relay.up': 'Connected',
+  'relay.down': 'Unreachable: official players are used',
+  'relay.invalid': 'This isn’t a web address',
+  'relay.noFfmpeg': 'No ffmpeg on the relay: YouTube videos keep their official player',
+  'tile.badgeHls': 'HLS',
+  'tile.hlsHint': 'Played through your relay, without ads',
   'drop.hint': 'Drop the link to add the stream',
 } as const
 

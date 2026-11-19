@@ -18,7 +18,7 @@ import { css, on, ref } from 'remix/component'
 import type { Store } from '../app/store.ts'
 import type { AudioMode, LayoutMode } from '../core/types.ts'
 import { t } from '../i18n/index.ts'
-import { capabilities, parseSource } from '../platforms/parse.ts'
+import { parseSource } from '../platforms/parse.ts'
 import { Fader, groupStyle, Key, keyStyle } from './controls.tsx'
 import { Icon } from './Icon.tsx'
 import { openMiniRegie, pipSupported } from './pip.ts'
@@ -119,7 +119,7 @@ export function Console(handle: Handle<{ store: Store; inputRef: (node: HTMLInpu
     const tiles = session.tiles
     const mix = store.mix()
     const focus = store.effectiveFocus()
-    const seekable = tiles.some((tile) => capabilities(tile.source).seek)
+    const seekable = tiles.some((tile) => store.caps(tile).seek)
     const layouts: [LayoutMode, string][] = [
       ['grid', t('layout.grid')],
       ['focus', t('layout.focus')],
@@ -263,7 +263,7 @@ export function Console(handle: Handle<{ store: Store; inputRef: (node: HTMLInpu
             <span class="silk">{t('console.manual')}</span>
             <div class="row">
               {tiles.map((tile, index) =>
-                capabilities(tile.source).volume ? (
+                store.caps(tile).volume ? (
                   <span key={tile.id} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span class="mono" style={{ fontSize: '12px', color: 'var(--dim)' }}>
                       {index + 1}

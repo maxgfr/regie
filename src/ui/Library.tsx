@@ -542,6 +542,7 @@ export function LibrarySheet(handle: Handle<{ store: Store }>) {
                     if (!file) return
                     try {
                       const count = library.importBackup(JSON.parse(await file.text()))
+                      store.loadRelaySettings()
                       store.toast(count === null ? 'toast.importFailed' : t('toast.imported', { n: count }))
                     } catch {
                       store.toast('toast.importFailed')
