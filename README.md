@@ -2,7 +2,7 @@
 
 **A control room for watching several streams at once.** Put Twitch, YouTube, Kick, TikTok, Vimeo, Dailymotion and direct HLS/MP4 streams side by side. One stream has the sound and one takes the main monitor. Regie lines up the delays between streams, keeps the chats beside them and moves the sound away from a stream that goes to an ad.
 
-**[maxgfr.github.io/regie](https://maxgfr.github.io/regie/)**: static, no account, no tracking.
+**[maxgfr.github.io/regie](https://maxgfr.github.io/regie/)**: static, no account, no tracking. An optional [relay](#ad-free-relay-optional) you run yourself removes the ads.
 
 Built for the evening when a tournament runs on five channels at once: the main cast and four player POVs, all with sound, each a few seconds out of step.
 
@@ -21,17 +21,18 @@ Built for the evening when a tournament runs on five channels at once: the main 
   - Hold `Alt` to listen to the stream under the pointer.
   - A player's own mute button and volume slider work too: Regie follows them. Unmuting another stream inside its player puts it on air.
 - **Ads.**
+  - With the [relay](#ad-free-relay-optional), Twitch, YouTube and Kick play in Regie's own player without ads. When Twitch has no ad-free stream to give, the ad is cut out: the picture holds and the sound moves to another stream. Everything below is about the official embeds.
   - When the stream on air goes to an ad, the sound moves to another stream (the one with the busiest chat if Regie can tell) and comes back when the ad ends.
-  - Ads stay silent.
+  - An ad is silenced while another stream has the sound. With no other stream to take it, the ad keeps it.
   - Ads play out on their own: Regie never touches a player during one (no quality change, no pause). A Twitch player that Twitch paused because it couldn't see it (another window in front, full screen elsewhere) is started again once it can be seen.
   - Optionally (help sheet, off by default because a reload cuts the stream), a Twitch player that goes to a mid-roll ad is reloaded once the ad is confirmed: a fresh player sometimes comes back without it. Never for a pre-roll, at most once per stream every five minutes, and when the fresh player opens on an ad again, the ads of that stream simply play for a quarter of an hour.
   - Twitch only runs an ad while its player is large and visible, after a click in the player. So a small stream in an ad is shown large, next to the main monitor, until the ad ends, and a notice asks for that one click.
   - On Twitch, ads are read from the player's own state messages. Elsewhere, Regie watches for a stream whose clock stops while it should be playing. You can also press `A`.
-- **Line check.** Twitch won't autoplay a player smaller than 400 × 300. A small Twitch monitor is shown large for a moment until it starts, then goes back to its place.
+- **Line check.** Twitch won't autoplay an embedded player smaller than 400 × 300. A small Twitch monitor is shown large for a moment until it starts, then goes back to its place.
 - **Delays lined up.**
   - Press `S`, then mark the same in-game moment on each stream.
   - Streams Regie can seek are delayed to match the slowest one: YouTube (live DVR included), every VOD, direct video.
-  - Twitch and Kick live streams can't be delayed from a page. They show their lead instead.
+  - Twitch and Kick live streams can't be delayed from a page. They show their lead instead, unless they play through the relay.
   - `←` `→` nudge a stream by 0.25 s.
   - For multi-POV VOD replays, play, pause and ±10 s act on every stream at once.
 - **Chats.**
@@ -62,7 +63,7 @@ Built for the evening when a tournament runs on five channels at once: the main 
 
 ## What a web page can't do
 
-Regie only uses official embeds, so it can only do what each player allows:
+Without the relay, Regie only uses official embeds, so it can only do what each player allows. The last row is a tile played through the [relay](#ad-free-relay-optional):
 
 | Platform       | Volume                         | Seek / delay     | Chat                    | Notes                                                                      |
 | -------------- | ------------------------------ | ---------------- | ----------------------- | -------------------------------------------------------------------------- |
@@ -73,10 +74,74 @@ Regie only uses official embeds, so it can only do what each player allows:
 | Vimeo          | ✓                              | –                | –                       |                                                                            |
 | Dailymotion    | mute only (reload)             | –                | –                       |                                                                            |
 | HLS / MP4 link | ✓                              | ✓                | –                       | played with hls.js where HLS isn't native                                  |
+| Through relay  | ✓                              | ✓ (lives too)    | unchanged               | Twitch live and VODs, YouTube, Kick: no ads, latency measured, hls.js      |
 
-- **Ads can't be blocked from a page.** Players are other sites, and Twitch puts its ads inside the video itself. Every site that embeds Twitch's player shows its ads, and the remaining workarounds are extensions, userscripts or proxies. Regie keeps ads silent and takes the sound elsewhere instead. To block ads, use a browser extension such as [uBlock Origin](https://ublockorigin.com/).
+- **Ads can't be blocked from a page alone.** Players are other sites, and Twitch puts its ads inside the video itself. Every site that embeds Twitch's player shows its ads. With the embeds, Regie moves the sound away from an ad instead. To get rid of them, run the optional [ad-free relay](#ad-free-relay-optional).
+- **Extensions, without the relay.** An ad blocker such as [uBlock Origin](https://ublockorigin.com/) works inside Regie's YouTube frames. [TTV LOL PRO](https://github.com/younesaassila/ttv-lol-pro) doesn't act on Regie's embedded Twitch players: it only handles requests from `www.twitch.tv` and `m.twitch.tv` pages.
 - **Twitch ads wait for a click.** Twitch starts its ads paused. A page can't click inside another site's player, and the player API's `play()` doesn't start an ad either: one click on play in that player does.
 - **Some Twitch channels ask for a click too.** If a channel carries a mature-content warning, Twitch waits for a click on "Start watching" in that player. Twitch also refuses to autoplay a player that is covered, so nothing in Regie is ever drawn over a player.
+
+## Ad-free relay (optional)
+
+The page stays static and anonymous. If you also run the relay on your machine (or deploy it), Regie plays Twitch (live and VODs), YouTube (live and videos) and Kick through it, as HLS in its own player instead of the embeds:
+
+- no ads (see [On an ad break](#on-an-ad-break));
+- full volume and seek on every relayed tile, so Twitch and Kick lives can be delayed and lined up too (`WINDOW_S` seconds of live kept);
+- quality capped to the tile, live latency measured, and none of Twitch's 400×300, visibility or click rules.
+
+Clips, TikTok, Vimeo and the rest keep their embeds, and a wall can mix both.
+
+### Run it
+
+You need [Bun](https://bun.sh). Twitch works with Bun alone; [yt-dlp](https://github.com/yt-dlp/yt-dlp) adds YouTube and Kick, and [ffmpeg](https://ffmpeg.org) YouTube videos.
+
+```sh
+bun run relay   # http://127.0.0.1:7878
+```
+
+Or in Docker, with Bun, yt-dlp and ffmpeg included. Build from the repository root:
+
+```sh
+docker build -f relay/Dockerfile -t regie-relay .
+docker run -p 7878:7878 -e RELAY_KEY="$(openssl rand -hex 16)" regie-relay
+```
+
+Then open Regie's help sheet, enter the relay's address (and key, if any), and check it says Connected. Chrome asks once to let `maxgfr.github.io` reach your local network: allow it.
+
+These settings stay in this browser, never in the URL: a shared link plays with or without a relay. Without a reachable relay, every tile keeps its official embed, and a relayed tile that doesn't start falls back to its embed in place.
+
+| Variable             | Default                                | Meaning                                                                                       |
+| -------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `PORT`               | `7878`                                 | Port.                                                                                         |
+| `HOST`               | `127.0.0.1` (`0.0.0.0` in Docker)      | Interface to listen on.                                                                       |
+| `ORIGINS`            | Regie's site and the local dev servers | Pages allowed by CORS, comma-separated.                                                       |
+| `RELAY_KEY`          | none                                   | Key every request must carry (`?key=`). **Set it for any relay others can reach.**            |
+| `TWITCH_PLAYER_TYPE` | `popout`                               | Player type of Twitch's main stream: `site`, `popout`, `embed`, `mobile_web` or `autoplay`.   |
+| `TWITCH_PROXY`       | none                                   | Your own HTTP proxy, for Twitch's token and playlist requests only. Video segments go direct. |
+| `WINDOW_S`           | `180`                                  | Seconds of live stream kept, so delays between streams can be lined up.                       |
+
+### On an ad break
+
+Twitch decides ads when it hands out a playback token, from your IP and the player type. Regie's embedded players are `embed`, which can get a pre-roll where `site`, `popout` or `mobile_web` get none. The relay asks for its own anonymous token (`popout` by default), and when an ad break starts anyway, it:
+
+1. tries fresh tokens with other player types (`site`, `popout`, `mobile_web`, `embed`), and serves the first ad-free stream during the break;
+2. tries Android's `autoplay` stream (360p) last;
+3. goes back to the main stream as soon as it is clean;
+4. if every stream has ads, cuts the ad segments out: the picture holds and Regie moves the sound to another stream.
+
+`TWITCH_PROXY` is the same idea as the [TTV LOL PRO](https://github.com/younesaassila/ttv-lol-pro) extension: a proxy in a country without Twitch ads gets a clean token. YouTube's ads are added by its player, so the streams the relay gets from yt-dlp have none.
+
+### Trade-offs
+
+- Relayed lives run about 18 to 28 s behind the broadcaster, against a few seconds in the embed. The anti-spoiler holds chat back to match.
+- YouTube videos are remuxed by ffmpeg (no re-encode) at about 1.3× real time: you can seek only within the part already remuxed.
+- Relayed lives are locked to 1× speed, since speed extensions made them stall. Videos keep any speed.
+
+### Security
+
+The relay listens on `127.0.0.1` by default and answers only the pages in `ORIGINS`. It isn't an open proxy: it only resolves Twitch, YouTube and Kick pages, rebuilds their URL itself, and serves playlists and segments under random ids. Everything stays anonymous: no account, cookie or API key is sent to any platform.
+
+More in [relay/README.md](relay/README.md).
 
 ## Privacy
 
@@ -86,7 +151,8 @@ There is no account, server or analytics. The page talks to:
 - YouTube, Vimeo and Dailymotion oEmbed, for video titles;
 - Twitch's public web GraphQL endpoint and Kick's public API, for search and live status (anonymous, read-only);
 - Twitch's public chat socket, read-only with an anonymous `justinfan` nickname, only when the merged chat is on;
-- Twitch's emote CDN.
+- Twitch's emote CDN;
+- your relay, only if you set one in the help sheet. The relay then talks to Twitch, YouTube and Kick (and to your `TWITCH_PROXY`, if set) for you.
 
 Twitch's GraphQL endpoint is undocumented. If it changes, search and live status stop working and the rest of Regie carries on.
 
@@ -97,6 +163,7 @@ bun install
 bun run dev        # http://localhost:5173
 bun run check      # typecheck, Biome, unit tests, build
 bun run test:e2e   # Playwright + axe on the build, with every player stubbed
+bun run relay      # the optional ad-free relay, on http://127.0.0.1:7878
 ```
 
 Stack:
@@ -113,6 +180,7 @@ src/
   chat/        anonymous read-only Twitch chat
   app/         the store (state, audio director, chat queue) and the local library
   ui/          Remix components: stage, monitors, vision mixer console, chat dock, library, test card
+relay/         the optional ad-free relay: a Bun server, Twitch tokens and ad breaks, yt-dlp and ffmpeg
 ```
 
 Automation:
