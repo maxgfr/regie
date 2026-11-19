@@ -1,0 +1,7 @@
+# Only what the relay needs (BuildKit reads this file for relay/Dockerfile).
+*
+!relay/**
+!src/core/types.ts
+!src/platforms/parse.ts
+relay/*.test.ts
+relay/fixtures.ts
