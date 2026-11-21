@@ -14,6 +14,7 @@
   "scripts": {
     "dev": "bun --hot scripts/dev.ts",
     "build": "bun scripts/build.ts",
+    "build:extension": "bun scripts/build-extension.ts",
     "preview": "bunx serve -l 4173 dist",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
@@ -21,7 +22,7 @@
     "test": "bun test src relay",
     "relay": "bun relay/server.ts",
     "test:e2e": "bunx playwright test",
-    "check": "bun run typecheck && bun run lint && bun run test && bun run build",
+    "check": "bun run typecheck && bun run lint && bun run test && bun run build && bun run build:extension",
     "endpoints": "bun scripts/endpoints.ts"
   },
   "dependencies": {

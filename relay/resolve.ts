@@ -6,42 +6,12 @@ import { rmSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { parseSource, sourcePage } from '../src/platforms/parse.ts'
 import { isMasterPlaylist, type MasterEntry, matchEntry, parseMaster, singleVariantMaster } from './playlist.ts'
+import { openTwitch, type RelaySource } from './source.ts'
 import type { Loaded, Origin, Upstream } from './stream.ts'
 import { type Twitch, UpstreamError } from './twitch.ts'
 
-export interface RelaySource {
-  platform: 'twitch' | 'youtube' | 'kick'
-  kind: 'live' | 'vod'
-  id: string
-  /** The canonical page URL: the cache key, and the only URL ever handed to yt-dlp. */
-  page: string
-}
-
-const KICK_VOD =
-  /^https?:\/\/(?:www\.)?kick\.com\/(?:[a-zA-Z0-9_-]{2,30}\/videos|video)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i
-
-/** Accepts Twitch live/VOD, YouTube videos and channel lives, Kick live/VOD; anything else is null. */
-export function canonicalize(input: string): RelaySource | null {
-  const text = input.trim()
-  const kickVod = KICK_VOD.exec(text)
-  if (kickVod?.[1]) {
-    const id = kickVod[1].toLowerCase()
-    const channel = /kick\.com\/([^/]+)\/videos\//i.exec(text)?.[1]?.toLowerCase()
-    const page = channel ? `https://kick.com/${channel}/videos/${id}` : `https://kick.com/video/${id}`
-    return { platform: 'kick', kind: 'vod', id, page }
-  }
-  const source = parseSource(text)
-  if (!source) return null
-  const { platform, kind, id } = source
-  const page = sourcePage({ platform, kind, id })
-  if (platform === 'twitch' && (kind === 'live' || kind === 'vod')) return { platform, kind, id, page }
-  if (platform === 'kick' && kind === 'live') return { platform, kind, id, page }
-  // The client sends `sourcePage()`, which writes every video id as watch?v=: live or not is yt-dlp's call.
-  if (platform === 'youtube' && (kind === 'live' || kind === 'vod')) return { platform, kind, id, page }
-  return null
-}
+export { canonicalize, type RelaySource } from './source.ts'
 
 // --- Tools ---
 
@@ -299,7 +269,7 @@ async function remuxOrigin(info: Info): Promise<Origin> {
 export async function openOrigin(source: RelaySource, twitch: Twitch): Promise<Origin> {
   if (source.platform === 'twitch') {
     try {
-      return source.kind === 'vod' ? await twitch.vod(source.id) : await twitch.live(source.id)
+      return await openTwitch(source, twitch)
     } catch (error) {
       // Offline is final; anything else (GQL changed, refused) gets yt-dlp's opinion.
       if (error instanceof UpstreamError && error.status === 404 && source.kind === 'live') throw error

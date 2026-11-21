@@ -58,12 +58,12 @@ A player type that had ads is left alone for 15 s. Each step is logged on one li
 
 ## HTTP
 
-| Route                            | Answer                                                                                                 |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `GET /health`                    | `{ "ok": true, "version": 1, "ytdlp": "2026.10.26" \| null, "ffmpeg": "9.0.2" \| null }`               |
-| `GET /play.m3u8?src=<page URL>`  | The master playlist, every URI pointing back to the relay. 400 unsupported, 404 offline, 502 upstream. |
-| `GET /v/<stream>/<variant>.m3u8` | A media playlist: rolling window, ads cut, the relay's own sequence. `X-Regie-Ad: 0\|1`.               |
-| `GET /s/<stream>/<segment>`      | The segment, streamed (Range supported).                                                               |
+| Route                            | Answer                                                                                                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`                    | `{ "ok": true, "version": 1, "ytdlp": "2026.10.26" \| null, "ffmpeg": "9.0.2" \| null, "platforms": ["twitch", …] }` (`youtube` and `kick` need yt-dlp) |
+| `GET /play.m3u8?src=<page URL>`  | The master playlist, every URI pointing back to the relay. 400 unsupported, 404 offline, 502 upstream.                                                  |
+| `GET /v/<stream>/<variant>.m3u8` | A media playlist: rolling window, ads cut, the relay's own sequence. `X-Regie-Ad: 0\|1`.                                                                |
+| `GET /s/<stream>/<segment>`      | The segment, streamed (Range supported).                                                                                                                |
 
 ## Security
 

@@ -2,11 +2,11 @@
  * Regie's optional HLS relay: `bun relay/server.ts`.
  * Serves ad-free HLS for Twitch, YouTube and Kick to the static page, through opaque ids only.
  */
-import { timingSafeEqual } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { createRelayHandler, RELAY_API_VERSION, type Replies } from './handler.ts'
 import { canonicalize, isRemuxFile, openOrigin, stopRemuxes, toolVersion } from './resolve.ts'
 import { Relay } from './stream.ts'
-import { PLAYER_TYPES, PRIMARY, Twitch, UpstreamError } from './twitch.ts'
+import { PLAYER_TYPES, PRIMARY, Twitch } from './twitch.ts'
 
 export interface Config {
   port: number
@@ -45,8 +45,6 @@ export function configFromEnv(env: Record<string, string | undefined> = process.
   }
 }
 
-const HLS = 'application/vnd.apple.mpegurl'
-
 /** Segment URLs come from the platforms' playlists; still, never let one point the relay at a private address. */
 export function publicHttp(target: string): boolean {
   let url: URL
@@ -70,14 +68,6 @@ export function publicHttp(target: string): boolean {
     (a === 192 && b === 168)
   )
 }
-const VERSION = 1
-
-function sameKey(given: string | null, expected: string): boolean {
-  if (given === null) return false
-  const a = Buffer.from(given)
-  const b = Buffer.from(expected)
-  return a.length === b.length && timingSafeEqual(a, b)
-}
 
 export function createHandler(config: Config) {
   const relay = new Relay(config.windowS)
@@ -88,54 +78,21 @@ export function createHandler(config: Config) {
   })
   let tools: { at: number; ytdlp: string | null; ffmpeg: string | null } | undefined
 
-  const cors = (request: Request): Record<string, string> => {
-    const origin = request.headers.get('Origin')
-    return {
-      ...(origin && config.origins.has(origin) ? { 'Access-Control-Allow-Origin': origin } : {}),
-      'Access-Control-Expose-Headers': 'X-Regie-Ad, Content-Length, Content-Range',
-      Vary: 'Origin',
-    }
-  }
-
-  const reply = (request: Request, status: number, body: BodyInit | null, headers: Record<string, string> = {}) =>
-    new Response(body, { status, headers: { ...cors(request), 'Cache-Control': 'no-store', ...headers } })
-
-  const error = (request: Request, status: number, message: string) =>
-    reply(request, status, JSON.stringify({ ok: false, error: message }), { 'Content-Type': 'application/json' })
-
-  async function health(request: Request): Promise<Response> {
+  async function health() {
     if (!tools || Date.now() - tools.at > 60_000) {
       const [ytdlp, ffmpeg] = await Promise.all([toolVersion('yt-dlp'), toolVersion('ffmpeg')])
       tools = { at: Date.now(), ytdlp, ffmpeg }
     }
-    const body = { ok: true, version: VERSION, ytdlp: tools.ytdlp, ffmpeg: tools.ffmpeg }
-    return reply(request, 200, JSON.stringify(body), { 'Content-Type': 'application/json' })
+    // Twitch needs Bun alone; YouTube and Kick go through yt-dlp.
+    const platforms = tools.ytdlp ? ['twitch', 'youtube', 'kick'] : ['twitch']
+    return { ok: true, version: RELAY_API_VERSION, ytdlp: tools.ytdlp, ffmpeg: tools.ffmpeg, platforms }
   }
 
-  async function play(request: Request, url: URL, suffix: string): Promise<Response> {
-    const source = canonicalize(url.searchParams.get('src') ?? '')
-    if (!source) return error(request, 400, 'Unsupported source')
-    try {
-      const stream = await relay.open(source.page, () => openOrigin(source, twitch))
-      return reply(request, 200, stream.master(suffix), { 'Content-Type': HLS })
-    } catch (failure) {
-      const status = failure instanceof UpstreamError ? failure.status : 502
-      return error(request, status, failure instanceof Error ? failure.message : 'Upstream failure')
-    }
-  }
-
-  async function media(request: Request, streamId: string, variantId: string, suffix: string): Promise<Response> {
-    const result = await relay.media(streamId, variantId, suffix)
-    if (result.status !== 200)
-      return error(request, result.status, result.status === 404 ? 'Offline' : 'Upstream failure')
-    return reply(request, 200, result.body, { 'Content-Type': HLS, 'X-Regie-Ad': result.ad ? '1' : '0' })
-  }
-
-  async function segment(request: Request, streamId: string, segmentId: string): Promise<Response> {
+  async function segment(request: Request, streamId: string, segmentId: string, { reply, error }: Replies) {
     const target = relay.segment(streamId, segmentId)
     if (!target) return error(request, 404, 'Unknown segment')
     const range = request.headers.get('Range')
-    if (target.startsWith('file:')) return localFile(request, fileURLToPath(target), range)
+    if (target.startsWith('file:')) return localFile(request, fileURLToPath(target), range, { reply, error })
     if (!publicHttp(target)) return error(request, 404, 'Unknown segment')
     try {
       const upstream = await fetch(target, {
@@ -155,7 +112,7 @@ export function createHandler(config: Config) {
     }
   }
 
-  async function localFile(request: Request, path: string, range: string | null): Promise<Response> {
+  async function localFile(request: Request, path: string, range: string | null, { reply, error }: Replies) {
     if (!isRemuxFile(path)) return error(request, 404, 'Unknown segment')
     const file = Bun.file(path)
     if (!(await file.exists())) return error(request, 404, 'Unknown segment')
@@ -176,41 +133,17 @@ export function createHandler(config: Config) {
     return reply(request, 200, file, { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes' })
   }
 
-  async function handle(request: Request): Promise<Response> {
-    if (request.method === 'OPTIONS') {
-      return reply(request, 204, null, {
-        'Access-Control-Allow-Methods': 'GET',
-        'Access-Control-Allow-Headers': 'Range',
-        'Access-Control-Allow-Private-Network': 'true',
-        'Access-Control-Max-Age': '600',
-      })
-    }
-    if (request.method !== 'GET' && request.method !== 'HEAD') return error(request, 405, 'Method not allowed')
-    const url = new URL(request.url)
-    const given = url.searchParams.get('key')
-    if (config.key && !sameKey(given, config.key)) return error(request, 401, 'Bad key')
-    // Every rewritten URI carries the key, since hls.js only follows URIs.
-    const suffix = config.key ? `?key=${encodeURIComponent(config.key)}` : ''
-    const path = url.pathname
-    if (path === '/health') return health(request)
-    if (path === '/play.m3u8') return play(request, url, suffix)
-    const variant = /^\/v\/([a-z0-9]+)\/([a-z0-9]+)\.m3u8$/.exec(path)
-    if (variant?.[1] && variant[2]) return media(request, variant[1], variant[2], suffix)
-    const chunk = /^\/s\/([a-z0-9]+)\/([a-z0-9]+\.[a-z0-9]{1,6})$/.exec(path)
-    if (chunk?.[1] && chunk[2]) return segment(request, chunk[1], chunk[2])
-    return error(request, 404, 'Not found')
-  }
-
-  return {
+  return createRelayHandler({
     relay,
-    fetch: async (request: Request): Promise<Response> => {
-      try {
-        return await handle(request)
-      } catch {
-        return error(request, 502, 'Relay error')
-      }
+    origins: config.origins,
+    key: config.key,
+    health,
+    source: (src) => {
+      const source = canonicalize(src)
+      return source && { key: source.page, open: () => openOrigin(source, twitch) }
     },
-  }
+    segment,
+  })
 }
 
 if (import.meta.main) {

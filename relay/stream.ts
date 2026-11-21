@@ -1,7 +1,9 @@
 /**
  * Streams and their variant pollers. A stream is one canonical source with its rewritten master; each
  * variant a player asks for gets a poller that keeps a rolling, ad-free window with its own sequence.
- * Segments are only reachable through the opaque ids handed out here.
+ * In 'opaque' mode (the server) segments are only reachable through the opaque ids handed out here; in
+ * 'direct' mode (the browser extension, which serves no segment) media playlists keep the upstream URLs.
+ * Portable: no Node or Bun API.
  */
 import {
   createTimeline,
@@ -45,6 +47,23 @@ const IDLE_LIVE_MS = 60_000
 const IDLE_VOD_MS = 30 * 60_000
 const RETIRED_MS = 60_000
 const FIRST_LOAD_MS = 20_000
+
+/** How media playlists point at segments, init maps and keys. */
+export type SegmentsMode = 'opaque' | 'direct'
+
+export interface RelayOptions {
+  /** 'opaque' (default): `/s/<stream>/<id>`, served by the host. 'direct': the absolute upstream URLs. */
+  segments?: SegmentsMode
+}
+
+/** A promise that resolves after `ms`; `cancel()` clears the timer once it is no longer needed. */
+function delay(ms: number): { promise: Promise<void>; cancel(): void } {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const promise = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms)
+  })
+  return { promise, cancel: () => clearTimeout(timer) }
+}
 
 function opaqueId(): string {
   return crypto.randomUUID().replaceAll('-', '').slice(0, 16)
@@ -135,7 +154,7 @@ class Variant {
     const every = Math.min(Math.max(tail?.duration || media.targetDuration || 2, 1), 10) * 1000
     if (this.mode === 'whole') {
       this.whole = media
-      for (const segment of media.segments) this.stream.register(segment, this.id)
+      if (!this.stream.direct) for (const segment of media.segments) this.stream.register(segment, this.id)
       return media.endList ? 0 : every
     }
     ingest(this.timeline, media, { windowS: this.stream.windowS, switched: loaded.switched })
@@ -145,7 +164,9 @@ class Variant {
   }
 
   playlist(suffix: string): string {
-    const uri = (url: string) => `/s/${this.stream.id}/${this.stream.idFor(url, this.id)}${suffix}`
+    const uri = this.stream.direct
+      ? (url: string) => url
+      : (url: string) => `/s/${this.stream.id}/${this.stream.idFor(url, this.id)}${suffix}`
     if (this.mode === 'whole' && this.whole) return serializeMedia(this.whole, uri)
     return serializeMedia(timelineMedia(this.timeline), uri)
   }
@@ -164,6 +185,7 @@ class Stream {
     readonly key: string,
     readonly origin: Origin,
     readonly windowS: number,
+    readonly direct = false,
   ) {
     for (const entry of origin.master.entries) {
       const variant = new Variant(this, entry)
@@ -244,8 +266,13 @@ export class Relay {
   readonly #byKey = new Map<string, Stream>()
   readonly #opening = new Map<string, Promise<Stream>>()
   readonly #sweeper: ReturnType<typeof setInterval>
+  readonly segments: SegmentsMode
 
-  constructor(readonly windowS: number) {
+  constructor(
+    readonly windowS: number,
+    options: RelayOptions = {},
+  ) {
+    this.segments = options.segments ?? 'opaque'
     this.#sweeper = setInterval(() => this.sweep(Date.now()), 10_000)
     this.#sweeper.unref?.()
   }
@@ -260,7 +287,7 @@ export class Relay {
     let pending = this.#opening.get(key)
     if (!pending) {
       pending = open().then((origin) => {
-        const stream = new Stream(key, origin, this.windowS)
+        const stream = new Stream(key, origin, this.windowS, this.segments === 'direct')
         this.#streams.set(stream.id, stream)
         this.#byKey.set(key, stream)
         return stream
@@ -280,7 +307,9 @@ export class Relay {
     if (!stream || !variant) return { status: 404 }
     stream.lastRequest = Date.now()
     const ready = variant.ready()
-    await Promise.race([ready, Bun.sleep(FIRST_LOAD_MS)])
+    const timeout = delay(FIRST_LOAD_MS)
+    await Promise.race([ready, timeout.promise])
+    timeout.cancel()
     const empty =
       variant.mode === 'unknown' || (variant.mode === 'live' && !variant.timeline.entries.length && !variant.ad)
     if (variant.failure && empty) {

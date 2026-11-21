@@ -16,5 +16,5 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["src", "e2e", "scripts", "relay", "*.ts"]
+  "include": ["src", "e2e", "scripts", "relay", "extension", "*.ts"]
 }

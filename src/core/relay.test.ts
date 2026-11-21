@@ -20,6 +20,16 @@ describe('relay', () => {
     expect(relayable({ platform: 'youtube', kind: 'live', id: 'dQw4w9WgXcQ' }, false)).toBe(true)
   })
 
+  test('a relay that lists its platforms only gets those', () => {
+    const twitch = { platform: 'twitch' as const, kind: 'live' as const, id: 'shroud' }
+    const kick = { platform: 'kick' as const, kind: 'live' as const, id: 'xqc' }
+    expect(relayable(kick, true, ['twitch'])).toBe(false)
+    expect(relayable(twitch, true, ['twitch'])).toBe(true)
+    expect(relayable({ platform: 'twitch', kind: 'clip', id: 'Funny' }, true, ['twitch'])).toBe(false)
+    expect(relayable(kick, true, null)).toBe(true)
+    expect(relayable(kick, true, [])).toBe(false)
+  })
+
   test('the typed address is cleaned', () => {
     expect(normalizeRelayBase('')).toBe('')
     expect(normalizeRelayBase('  ')).toBe('')
@@ -47,8 +57,12 @@ describe('relay', () => {
     expect(parseHealth({ ok: true, version: 1, ytdlp: '2026.10.26', ffmpeg: '7.1' })).toEqual({
       ytdlp: '2026.10.26',
       ffmpeg: '7.1',
+      platforms: null,
     })
-    expect(parseHealth({ ok: true, ytdlp: null })).toEqual({ ytdlp: null, ffmpeg: null })
+    expect(parseHealth({ ok: true, ytdlp: null })).toEqual({ ytdlp: null, ffmpeg: null, platforms: null })
+    expect(parseHealth({ ok: true, platforms: ['twitch', 'vimeo', 3, 'kick'] })?.platforms).toEqual(['twitch', 'kick'])
+    expect(parseHealth({ ok: true, platforms: 'twitch' })?.platforms).toBeNull()
+    expect(parseHealth({ ok: true, platforms: [] })?.platforms).toEqual([])
     expect(parseHealth({ ok: false })).toBeNull()
     expect(parseHealth('ok')).toBeNull()
     expect(parseHealth(null)).toBeNull()
