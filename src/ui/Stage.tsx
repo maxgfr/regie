@@ -525,7 +525,12 @@ function TileView(handle: Handle<TileProps>) {
               </span>
             )}
             {store.relayed(id) && (
-              <span class="tag" data-kind="hls" data-optional title={t('tile.hlsHint')}>
+              <span
+                class="tag"
+                data-kind="hls"
+                data-optional
+                title={t(store.relayedVia(id) === 'extension' ? 'tile.hlsHintExtension' : 'tile.hlsHint')}
+              >
                 {t('tile.badgeHls')}
               </span>
             )}

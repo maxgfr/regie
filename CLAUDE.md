@@ -34,6 +34,7 @@ The page must work exactly as before without it. A relayed tile plays the relay'
 - **Capabilities depend on the player:** use `store.caps(tile)`, not `capabilities(tile.source)`.
 - **Relay settings live in localStorage** (`library.relaySettings()`), never in the hash: they belong to the machine, and a shared link must play on both sides.
 - At startup, players the relay could take wait for its first answer (`RELAY_WAIT_MS`), so they don't mount twice. A later status change remounts only the tiles it affects, once.
+- **The browser extension (`extension/`) shares the engine** (`relay/handler.ts`, `stream.ts`, `twitch.ts`) in its service worker, Twitch only, and answers the page through its bridge (`window.postMessage`, `src/core/extension-protocol.ts`). Page code reaches it only through `src/platforms/extension.ts`, and everything must keep working without it. A server relay that is up wins over it (`pickRelay()`); the startup gate also waits for its hello and `/health`.
 - Server side: no open proxy. `src` is parsed with `parseSource()` and allow-listed; segments are served only by opaque ids the relay created; yt-dlp is spawned with an argument array (no shell) and `--` before the URL. `RELAY_KEY` is required for anything public.
 
 ## Code

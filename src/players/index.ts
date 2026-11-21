@@ -1,3 +1,4 @@
+import { EXTENSION_BASE } from '../core/extension-protocol.ts'
 import { relayable, relayUrl } from '../core/relay.ts'
 import { createIframePlayer } from './iframe.ts'
 import { createTikTokPlayer } from './tiktok.ts'
@@ -10,9 +11,15 @@ export function createPlayer(context: PlayerContext): Player | null {
   const { platform, kind } = context.source
   if (kind === 'unembeddable') return null
   const { relay } = context
-  if (relay && relayable(context.source, relay.remux)) {
+  if (relay && relayable(context.source, relay.remux, relay.platforms)) {
+    const { onFail } = relay
+    if (relay.kind === 'extension') {
+      // The playlists come through the extension's bridge: their address is only a key for hls.js.
+      const src = relayUrl(EXTENSION_BASE, '', context.source)
+      return createVideoPlayer(context, { src, forceHls: true, onFail, loadPlaylist: relay.load })
+    }
     const src = relayUrl(relay.base, relay.key, context.source)
-    return createVideoPlayer(context, { src, forceHls: true, onFail: relay.onFail })
+    return createVideoPlayer(context, { src, forceHls: true, onFail })
   }
   if (platform === 'twitch' && kind !== 'clip') return createTwitchPlayer(context)
   if (platform === 'youtube') return createYouTubePlayer(context)
@@ -21,4 +28,4 @@ export function createPlayer(context: PlayerContext): Player | null {
   return createIframePlayer(context)
 }
 
-export type { PlaybackState, Player, PlayerContext, PlayerEvents } from './types.ts'
+export type { PlaybackState, Player, PlayerContext, PlayerEvents, PlayerRelay } from './types.ts'

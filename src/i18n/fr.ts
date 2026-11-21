@@ -226,7 +226,10 @@ export const fr: Record<MessageKey, string> = {
   'relay.down': 'Injoignable : les players officiels sont utilisés',
   'relay.invalid': 'Ce n’est pas une adresse web',
   'relay.noFfmpeg': 'Pas de ffmpeg sur le relais : les vidéos YouTube gardent leur player officiel',
+  'relay.extension': 'Extension Regie connectée : Twitch sans pub',
+  'relay.downExtension': 'Injoignable : l’extension Regie lit Twitch en attendant',
   'tile.badgeHls': 'HLS',
   'tile.hlsHint': 'Lu via votre relais, sans pub',
+  'tile.hlsHintExtension': 'Lu via l’extension Regie, sans pub',
   'drop.hint': 'Lâchez le lien pour ajouter le stream',
 }

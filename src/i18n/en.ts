@@ -218,8 +218,11 @@ export const en = {
   'relay.down': 'Unreachable: official players are used',
   'relay.invalid': 'This isn’t a web address',
   'relay.noFfmpeg': 'No ffmpeg on the relay: YouTube videos keep their official player',
+  'relay.extension': 'Regie extension connected: Twitch without ads',
+  'relay.downExtension': 'Unreachable: the Regie extension plays Twitch meanwhile',
   'tile.badgeHls': 'HLS',
   'tile.hlsHint': 'Played through your relay, without ads',
+  'tile.hlsHintExtension': 'Played through the Regie extension, without ads',
   'drop.hint': 'Drop the link to add the stream',
 } as const
 

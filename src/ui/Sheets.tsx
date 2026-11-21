@@ -179,6 +179,8 @@ function RelaySettings(handle: Handle<{ store: Store }>) {
       key = relay.key
     }
     const invalid = relay.status === 'down' && normalizeRelayBase(relay.url) === null
+    // Without a server relay up, the Regie extension plays Twitch: the "official players" lines would be wrong.
+    const viaExtension = relay.via === 'extension'
     const status =
       relay.status === 'up'
         ? [t('relay.up'), relay.ytdlp && `yt-dlp ${relay.ytdlp}`, relay.ffmpeg && `ffmpeg ${relay.ffmpeg}`]
@@ -187,7 +189,7 @@ function RelaySettings(handle: Handle<{ store: Store }>) {
         : relay.status === 'checking'
           ? t('relay.checking')
           : relay.status === 'down'
-            ? t(invalid ? 'relay.invalid' : 'relay.down')
+            ? t(invalid ? 'relay.invalid' : viaExtension ? 'relay.downExtension' : 'relay.down')
             : t('relay.off')
     const [before, after] = t('relay.run').split('{command}')
     return (
@@ -227,12 +229,19 @@ function RelaySettings(handle: Handle<{ store: Store }>) {
               ]}
             />
           </label>
-          <p class="status" data-status={relay.status} role="status">
-            <span>
-              {status}
-              {relay.status === 'up' && !relay.ffmpeg && <small>{t('relay.noFfmpeg')}</small>}
-            </span>
-          </p>
+          {!(viaExtension && relay.status === 'off') && (
+            <p class="status" data-status={relay.status} role="status">
+              <span>
+                {status}
+                {relay.status === 'up' && !relay.ffmpeg && <small>{t('relay.noFfmpeg')}</small>}
+              </span>
+            </p>
+          )}
+          {viaExtension && (
+            <p class="status" data-status="up" role="status">
+              <span>{t('relay.extension')}</span>
+            </p>
+          )}
         </fieldset>
         <p class="note">
           {before}

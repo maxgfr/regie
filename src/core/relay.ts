@@ -35,6 +35,27 @@ export function relayable(source: Source, remux = true, platforms?: readonly str
   return false
 }
 
+/** Which relay plays a tile: the viewer's own server, the Regie browser extension, or none (its embed). */
+export type RelayVia = 'server' | 'extension'
+
+/** Platforms the extension plays before its `/health` says otherwise. */
+export const EXTENSION_PLATFORMS: readonly RelayPlatform[] = ['twitch']
+
+/**
+ * Picks the relay a source plays from. The viewer's server relay wins when it is up and plays the source;
+ * otherwise the extension, when it answered and plays the source; otherwise none. `null` health: not up.
+ */
+export function pickRelay(
+  source: Source,
+  relays: { server: RelayHealth | null; extension: RelayHealth | null },
+): RelayVia | null {
+  const { server, extension } = relays
+  if (server && relayable(source, server.ffmpeg !== null, server.platforms)) return 'server'
+  // The extension doesn't remux: it only cuts Twitch's own HLS.
+  if (extension && relayable(source, false, extension.platforms ?? EXTENSION_PLATFORMS)) return 'extension'
+  return null
+}
+
 /** Cleans the address the viewer typed: `localhost:7878/` → `http://localhost:7878`. Empty is off, null is invalid. */
 export function normalizeRelayBase(input: string): string | null {
   const text = input.trim()

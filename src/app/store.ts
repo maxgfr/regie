@@ -15,6 +15,7 @@ import {
   WAKE_AFTER_MS,
 } from '../core/ads.ts'
 import { mixAudio } from '../core/audio.ts'
+import { failedReply } from '../core/extension-protocol.ts'
 import {
   decayHype,
   type HypeState,
@@ -25,15 +26,24 @@ import {
   TAKEOVER_MS,
   TAKEOVER_SPIKE,
 } from '../core/hype.ts'
-import { normalizeRelayBase, type RelayStatus, relayable } from '../core/relay.ts'
+import {
+  EXTENSION_PLATFORMS,
+  normalizeRelayBase,
+  pickRelay,
+  type RelayHealth,
+  type RelayStatus,
+  type RelayVia,
+  relayable,
+} from '../core/relay.ts'
 import { decodeSession, defaultSession, encodeSession, newTile } from '../core/session.ts'
 import { chatHold, planSync } from '../core/sync.ts'
 import type { AudioMode, Capabilities, LayoutMode, Session, Source, Tile } from '../core/types.ts'
 import { type Creator, kickChannel, twitchChannels } from '../platforms/directory.ts'
+import { extension, extensionHealth } from '../platforms/extension.ts'
 import { capabilities, sourceName } from '../platforms/parse.ts'
 import { relayHealth } from '../platforms/relay.ts'
 import { fetchTitle } from '../platforms/titles.ts'
-import { createPlayer, type PlaybackState, type Player } from '../players/index.ts'
+import { createPlayer, type PlaybackState, type Player, type PlayerRelay } from '../players/index.ts'
 import { canPlayWithSound } from '../players/load-script.ts'
 import * as library from './library.ts'
 
@@ -94,8 +104,10 @@ const MAX_CHAT = 400
 const FADE_MS = 600
 /** At startup, how long players the relay could take wait for its first answer before mounting their embed. */
 const RELAY_WAIT_MS = 1500
-/** How often an unreachable relay is asked again. */
+/** How often an unreachable relay (or a missing extension) is asked again. */
 const RELAY_RETRY_MS = 30_000
+/** `#relayTarget` of a tile playing through the Regie extension (a server target is an address). */
+const EXTENSION_TARGET = 'extension'
 
 type Events = { change: Event; chat: Event; tick: Event }
 
@@ -127,13 +139,19 @@ export class Store extends TypedEventTarget<Events> {
     liveAlerts: [] as Creator[],
     toast: null as string | null,
   }
-  /** The viewer's own relay (`bun run relay`), saved in this browser only: where it is and whether it answers. */
+  /**
+   * The viewer's own relay (`bun run relay`), saved in this browser only: where it is and whether it answers.
+   * `via`: the relay Twitch tiles play from now (the server when it is up, else the Regie extension when it
+   * answers, else none). `extension`: the extension's version while it answers.
+   */
   relay = {
     url: '',
     key: '',
     status: 'off' as RelayStatus,
     ytdlp: null as string | null,
     ffmpeg: null as string | null,
+    via: null as RelayVia | null,
+    extension: null as string | null,
   }
   chatLog: ChatMessage[] = []
   #pending: (ChatMessage & { release: number })[] = []
@@ -160,10 +178,21 @@ export class Store extends TypedEventTarget<Events> {
   // ----- lifecycle -----
 
   start() {
+    // The players a relay could take wait for the relays' first answers: the server's, if one is set, and
+    // the extension's, which may or may not be installed.
+    this.#relayGate = true
+    this.#relayGateTimer = setTimeout(() => this.#openGate(), RELAY_WAIT_MS)
+    this.#gateWaits.add('extension')
     const relay = library.relaySettings()
     this.#useRelay(relay.url, relay.key, true)
+    void this.#checkExtension()
+    // Installed or enabled since the page loaded: ask it.
+    extension()?.onHello(() => {
+      if (!this.#extensionHealth && !this.#extensionChecking) void this.#checkExtension()
+    })
     setInterval(() => {
       if (this.relay.status === 'down' && normalizeRelayBase(this.relay.url)) this.#checkRelay()
+      if (!this.#extensionHealth && !this.#extensionChecking) void this.#checkExtension()
     }, RELAY_RETRY_MS)
     this.loadHash(location.hash)
     window.addEventListener('hashchange', () => {
@@ -378,7 +407,7 @@ export class Store extends TypedEventTarget<Events> {
     if (!tile || this.players.has(id)) return
     this.#containers.set(id, container)
     // Mounting the embed now would mean reloading it in a moment if the relay answers.
-    if (this.#relayGate && relayable(tile.source)) {
+    if (this.#relayGate && this.#awaitsRelay(tile.source)) {
       this.#deferred.add(id)
       return
     }
@@ -389,13 +418,8 @@ export class Store extends TypedEventTarget<Events> {
       host: this.#host,
       initialVolume: this.ui.soundAllowed ? (this.#targetVolumes()[id] ?? 0) : 0,
       relay: target
-        ? {
-            base: normalizeRelayBase(this.relay.url) ?? '',
-            key: this.relay.key,
-            remux: this.relay.ffmpeg !== null,
-            // Called from the player's own callbacks: it is replaced once they have returned.
-            onFail: () => setTimeout(() => this.#fallBack(id, player), 0),
-          }
+        ? // `onFail` is called from the player's own callbacks: it is replaced once they have returned.
+          this.#playerRelay(target, () => setTimeout(() => this.#fallBack(id, player), 0))
         : undefined,
       events: {
         state: (state, byPlayer) => {
@@ -404,7 +428,7 @@ export class Store extends TypedEventTarget<Events> {
           runtime.state = state
           // A relayed stream that stops for good may mean the relay itself is gone: ask it again, and if it
           // doesn't answer, the official players take over.
-          if (state === 'offline' && this.#relayed.has(id) && this.relay.status === 'up') this.#checkRelay()
+          if (state === 'offline' && this.#relayed.has(id)) this.#recheck(this.#relayed.get(id))
           runtime.pausedAt = state === 'paused' ? (runtime.pausedAt ?? Date.now()) : undefined
           if (state === 'paused') {
             // Clicking inside a player moves the focus into its iframe: a pause from there is the viewer's.
@@ -616,12 +640,20 @@ export class Store extends TypedEventTarget<Events> {
   #relayed = new Map<string, string>()
   /** Tiles whose stream didn't start on the relay: they keep their official player. */
   #relayFailed = new Set<string>()
-  /** At startup, the players the relay could take wait for its first answer (`RELAY_WAIT_MS` at most). */
+  /** At startup, the players a relay could take wait for the relays' first answers (`RELAY_WAIT_MS` at most). */
   #relayGate = false
   #relayGateTimer: ReturnType<typeof setTimeout> | undefined
+  /** The relays whose first answer the gate still waits for. */
+  #gateWaits = new Set<RelayVia>()
   #deferred = new Set<string>()
   /** Only the latest health check counts. */
   #relayCheck = 0
+  /** The server relay's last `/health`, while it is up. */
+  #serverHealth: RelayHealth | null = null
+  /** The extension's last `/health`, while it answers. */
+  #extensionHealth: RelayHealth | null = null
+  #extensionCheck = 0
+  #extensionChecking = false
 
   /** Changes the relay settings (help sheet) and asks the new relay. */
   setRelay(url: string, key: string) {
@@ -646,9 +678,16 @@ export class Store extends TypedEventTarget<Events> {
     return this.tile(id)?.source.platform === 'twitch' && !this.#relayed.has(id) && !this.#deferred.has(id)
   }
 
-  /** The tile plays through the viewer's relay. */
+  /** The tile plays through the viewer's relay (or the extension). */
   relayed(id: string): boolean {
     return this.#relayed.has(id)
+  }
+
+  /** Which relay the tile plays through, or null for its official player. */
+  relayedVia(id: string): RelayVia | null {
+    const target = this.#relayed.get(id)
+    if (target === undefined) return null
+    return target === EXTENSION_TARGET ? 'extension' : 'server'
   }
 
   /** What Regie can do with a tile's player, which depends on whether it plays through the relay. */
@@ -657,7 +696,8 @@ export class Store extends TypedEventTarget<Events> {
   }
 
   #useRelay(url: string, key: string, startup: boolean) {
-    this.relay = { url, key, status: 'off', ytdlp: null, ffmpeg: null }
+    this.relay = { ...this.relay, url, key, status: 'off', ytdlp: null, ffmpeg: null }
+    this.#serverHealth = null
     this.#relayCheck++
     if (startup && !url) return
     if (!url || normalizeRelayBase(url) === null) {
@@ -666,10 +706,7 @@ export class Store extends TypedEventTarget<Events> {
       return
     }
     this.relay.status = 'checking'
-    if (startup) {
-      this.#relayGate = true
-      this.#relayGateTimer = setTimeout(() => this.#openGate(), RELAY_WAIT_MS)
-    }
+    if (startup) this.#gateWaits.add('server')
     this.#emit('change')
     this.#checkRelay()
   }
@@ -681,15 +718,49 @@ export class Store extends TypedEventTarget<Events> {
     const health = await relayHealth(base, this.relay.key)
     if (token !== this.#relayCheck) return
     const status: RelayStatus = health ? 'up' : 'down'
-    if (status === this.relay.status && !this.#relayGate) return
+    if (status === this.relay.status && !this.#gateWaits.has('server')) return
     this.relay.status = status
     this.relay.ytdlp = health?.ytdlp ?? null
     this.relay.ffmpeg = health?.ffmpeg ?? null
-    this.#settleRelay()
+    this.#serverHealth = health
+    this.#settleRelay('server')
   }
 
-  /** The relay answered (or was turned off): only the tiles it changes are mounted again, once. */
-  #settleRelay() {
+  /**
+   * Asks the Regie extension (`src/platforms/extension.ts`). It is there when its bridge says hello and its
+   * service worker answers `/health`; an extension reloaded since the page loaded answers no more (status 0).
+   */
+  async #checkExtension() {
+    const token = ++this.#extensionCheck
+    this.#extensionChecking = true
+    const health = await extensionHealth()
+    if (token !== this.#extensionCheck) return
+    this.#extensionChecking = false
+    const was = this.#extensionHealth !== null
+    this.#extensionHealth = health
+    this.relay.extension = health ? (extension()?.version ?? '') : null
+    if (was === (health !== null) && !this.#gateWaits.has('extension')) return
+    this.#settleRelay('extension')
+  }
+
+  /** A relayed tile failed: ask the relay it played from again, so the other tiles leave it if it is gone. */
+  #recheck(target: string | undefined) {
+    if (target === EXTENSION_TARGET) {
+      if (!this.#extensionChecking) void this.#checkExtension()
+    } else if (target && this.relay.status === 'up') this.#checkRelay()
+  }
+
+  /**
+   * A relay answered (or was turned off): only the tiles it changes are mounted again, once. At startup,
+   * nothing mounts until every relay that could take a waiting tile has answered.
+   */
+  #settleRelay(answered?: RelayVia) {
+    if (answered) this.#gateWaits.delete(answered)
+    this.relay.via = this.relay.status === 'up' ? 'server' : this.#extensionHealth ? 'extension' : null
+    if (this.#relayGate && this.#gateHolds()) {
+      this.#emit('change')
+      return
+    }
     this.#openGate()
     for (const id of [...this.players.keys()]) {
       const tile = this.tile(id)
@@ -698,17 +769,58 @@ export class Store extends TypedEventTarget<Events> {
     this.changed(false)
   }
 
-  /** The relay a tile should play from (address and key), or '' for its official player. */
+  /** A relay still to answer could change where a waiting tile plays. A server that is up wins anyway. */
+  #gateHolds(): boolean {
+    if (this.#gateWaits.has('server')) return true
+    return this.#gateWaits.has('extension') && this.relay.status !== 'up'
+  }
+
+  /** While the gate is closed, whether a tile waits: a relay still to answer could play it. */
+  #awaitsRelay(source: Source): boolean {
+    if (this.#gateWaits.has('server') && relayable(source)) return true
+    if (!this.#gateWaits.has('extension') || this.relay.status === 'up') return false
+    return relayable(source, false, EXTENSION_PLATFORMS)
+  }
+
+  /**
+   * The relay a tile should play from: the server's address and key, `EXTENSION_TARGET`, or '' for its
+   * official player.
+   */
   #relayTarget(tile: Tile): string {
+    if (this.#relayFailed.has(tile.id)) return ''
     const base = normalizeRelayBase(this.relay.url)
-    if (this.relay.status !== 'up' || !base || this.#relayFailed.has(tile.id)) return ''
-    return relayable(tile.source, this.relay.ffmpeg !== null) ? `${base}#${this.relay.key}` : ''
+    const server = this.relay.status === 'up' && base ? this.#serverHealth : null
+    const via = pickRelay(tile.source, { server, extension: this.#extensionHealth })
+    if (via === 'server') return `${base}#${this.relay.key}`
+    return via === 'extension' ? EXTENSION_TARGET : ''
+  }
+
+  /** What a player needs to play from a relay target. */
+  #playerRelay(target: string, onFail: () => void): PlayerRelay {
+    if (target === EXTENSION_TARGET) {
+      return {
+        kind: 'extension',
+        remux: false,
+        platforms: this.#extensionHealth?.platforms ?? EXTENSION_PLATFORMS,
+        onFail,
+        load: (path, timeoutMs) => extension()?.fetch(path, { timeoutMs }) ?? Promise.resolve(failedReply()),
+      }
+    }
+    return {
+      kind: 'server',
+      base: normalizeRelayBase(this.relay.url) ?? '',
+      key: this.relay.key,
+      remux: this.relay.ffmpeg !== null,
+      platforms: this.#serverHealth?.platforms ?? null,
+      onFail,
+    }
   }
 
   /** Mounts the players that waited for the relay's first answer. */
   #openGate() {
     if (!this.#relayGate) return
     this.#relayGate = false
+    this.#gateWaits.clear()
     clearTimeout(this.#relayGateTimer)
     for (const id of [...this.#deferred]) {
       this.#deferred.delete(id)
@@ -723,10 +835,11 @@ export class Store extends TypedEventTarget<Events> {
   /** The stream never started on the relay: the tile gets its official player, in the same container. */
   #fallBack(id: string, player: Player | null) {
     if (!player || this.players.get(id) !== player) return
+    const target = this.#relayed.get(id)
     this.#relayFailed.add(id)
     this.#remount(id)
     this.changed(false)
-    if (this.relay.status === 'up') this.#checkRelay()
+    this.#recheck(target)
   }
 
   setAdReload(on: boolean) {

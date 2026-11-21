@@ -440,6 +440,107 @@ test('a stream the relay can’t play falls back to its official player, in plac
   await expect(tile.locator('.tag[data-kind="hls"]')).toHaveCount(0)
 })
 
+const SEGMENTS = 'https://video-edge-c1.example.hls.ttvnw.net'
+
+/**
+ * A fake Regie extension: its bridge, answered in the page itself (it runs before Regie's scripts, as the
+ * real one does at `document_start`). `play` says whether its playlist loads. Media playlists list Twitch CDN
+ * segments, as the extension's do; they are never answered, so the player stays on the extension, loading.
+ */
+async function extensionBridge(page: Page, { play }: { play: boolean }) {
+  await page.route('https://player.twitch.tv/js/embed/v1.js', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE_TWITCH }),
+  )
+  await page.route(`${SEGMENTS}/**`, () => new Promise<void>(() => undefined))
+  await page.addInitScript(
+    ({ play, segments }) => {
+      const requests: string[] = []
+      ;(window as unknown as { __bridge: string[] }).__bridge = requests
+      const post = (message: unknown) => window.postMessage(message, location.origin)
+      const hello = () => post({ source: 'regie-extension', type: 'hello', version: '9.9.9' })
+      const m3u8 = { 'content-type': 'application/vnd.apple.mpegurl' }
+      const answer = (url: string) => {
+        const path = url.split('?')[0] ?? ''
+        if (path === '/health') {
+          const health = { ok: true, version: 1, ytdlp: null, ffmpeg: null, platforms: ['twitch'], extension: true }
+          return { status: 200, headers: { 'content-type': 'application/json' }, body: JSON.stringify(health) }
+        }
+        if (path === '/play.m3u8') {
+          if (!play) return { status: 502, headers: {}, body: '{"ok":false}' }
+          const body = '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360\n/v/s1/360p.m3u8\n'
+          return { status: 200, headers: m3u8, body }
+        }
+        if (path.startsWith('/v/')) {
+          const body = `#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:1\n#EXTINF:2.000,live\n${segments}/v1/segment/1.ts\n`
+          return { status: 200, headers: { ...m3u8, 'x-regie-ad': '0' }, body }
+        }
+        return { status: 404, headers: {}, body: '' }
+      }
+      window.addEventListener('message', (event) => {
+        const data = event.data as { source?: string; type?: string; id?: string; url?: string } | null
+        if (event.source !== window || data?.source !== 'regie-page') return
+        if (data.type === 'ping') hello()
+        if (data.type !== 'request' || typeof data.url !== 'string') return
+        requests.push(data.url)
+        post({ source: 'regie-extension', type: 'response', id: data.id, ...answer(data.url) })
+      })
+      hello()
+    },
+    { play, segments: SEGMENTS },
+  )
+}
+
+const bridgeRequests = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __bridge?: string[] }).__bridge ?? [])
+
+test('with the Regie extension, Twitch plays through it and Kick keeps its embed', async ({ page }) => {
+  await extensionBridge(page, { play: true })
+  const segments: string[] = []
+  page.on('request', (request) => {
+    if (request.url().startsWith(SEGMENTS)) segments.push(request.url())
+  })
+  await page.goto('/#s=tw.alpha|kk.beta')
+  await expect(page.locator('[data-tile] video')).toHaveCount(1)
+  await expect
+    .poll(() => bridgeRequests(page))
+    .toContain(`/play.m3u8?src=${encodeURIComponent('https://www.twitch.tv/alpha')}`)
+  // The variant, relative in the master playlist, is asked of the extension too.
+  await expect.poll(() => bridgeRequests(page)).toContain('/v/s1/360p.m3u8')
+  // Segments come straight from Twitch's CDN, not through the bridge.
+  await expect.poll(() => segments).toContain(`${SEGMENTS}/v1/segment/1.ts`)
+  await expect(page.locator('[data-tile] .tag[data-kind="hls"]')).toHaveCount(1)
+  // The Twitch embed was never mounted; the Kick tile is an iframe.
+  expect(await twitchPlayers(page)).toBe(0)
+  await expect(page.locator('[data-tile] iframe')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Help', exact: true }).click()
+  await expect(page.getByText('Regie extension connected: Twitch without ads')).toBeVisible()
+  await expect(page.getByText('Off: official players are used')).toHaveCount(0)
+  await page.unrouteAll({ behavior: 'ignoreErrors' })
+})
+
+test('a stream the extension can’t play falls back to its official player, in place', async ({ page }) => {
+  await extensionBridge(page, { play: false })
+  await page.goto('/#s=tw.alpha')
+  await expect
+    .poll(() => bridgeRequests(page))
+    .toContain(`/play.m3u8?src=${encodeURIComponent('https://www.twitch.tv/alpha')}`)
+  await expect.poll(() => twitchPlayers(page), { timeout: 10_000 }).toBe(1)
+  const tile = page.locator('[data-tile]').first()
+  await expect(tile.locator('iframe')).toHaveCount(1)
+  await expect(tile.locator('video')).toHaveCount(0)
+})
+
+test('a server relay that is up takes precedence over the extension', async ({ page }) => {
+  const requests = await relay(page, { health: true, play: true })
+  await extensionBridge(page, { play: true })
+  await page.goto('/#s=tw.alpha')
+  await expect(page.locator('[data-tile] video')).toHaveCount(1)
+  await expect.poll(() => requests.some((path) => path.startsWith('/play.m3u8'))).toBe(true)
+  expect((await bridgeRequests(page)).some((path) => path.startsWith('/play.m3u8'))).toBe(false)
+  expect(await twitchPlayers(page)).toBe(0)
+  await page.unrouteAll({ behavior: 'ignoreErrors' })
+})
+
 test('a live video stays at real time, whatever a speed extension sets; a VOD keeps its speed', async ({ page }) => {
   await page.goto('/#s=vl.https://example.com/live.m3u8|v.https://example.com/a.mp4')
   await expect(page.locator('[data-tile] video')).toHaveCount(2)

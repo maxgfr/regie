@@ -1,4 +1,5 @@
 import type HlsType from 'hls.js'
+import { bridgePlaylistLoader, type LoadPlaylist } from './bridge-loader.ts'
 import type { Player, PlayerContext } from './types.ts'
 
 export interface VideoOptions {
@@ -11,12 +12,20 @@ export interface VideoOptions {
   forceHls?: boolean
   /** The stream never started: the caller mounts another player in its place. */
   onFail?: () => void
+  /**
+   * Loads the playlists through the Regie extension instead of the network (`src` is then an address under
+   * `EXTENSION_BASE`). Segments are still fetched by hls.js itself.
+   */
+  loadPlaylist?: LoadPlaylist
 }
 
 /** Set by the relay on each media playlist: `1` while the stream is in an ad it couldn't avoid (picture frozen). */
 const AD_HEADER = 'X-Regie-Ad'
 
-/** A response header of a playlist, whichever loader hls.js used (XMLHttpRequest or fetch). */
+/**
+ * A response header of a playlist, whichever loader hls.js used (XMLHttpRequest, fetch, or the extension's,
+ * which hands over a `Response`). Both lookups ignore the header's case.
+ */
 function header(details: unknown, name: string): string | null {
   try {
     const xhr = details as { getResponseHeader?: (name: string) => string | null }
@@ -109,6 +118,7 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
                 backBufferLength: 90,
                 // A video starts at its beginning (or `source.start`), not at the end of what's remuxed.
                 startPosition: source.kind === 'vod' ? 0 : -1,
+                ...(options.loadPlaylist ? { pLoader: bridgePlaylistLoader(options.loadPlaylist) } : {}),
               }
             : { lowLatencyMode: true },
         )

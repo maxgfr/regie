@@ -143,6 +143,34 @@ The relay listens on `127.0.0.1` by default and answers only the pages in `ORIGI
 
 More in [relay/README.md](relay/README.md).
 
+## Browser extension (optional)
+
+The "Regie relay" Chrome extension runs the same engine as the relay, inside the browser, with nothing to run or configure. It plays **Twitch only** (live and VODs, not clips) as HLS in Regie's own player, without ads, with the same full volume, seek and latency as the relay. YouTube, Kick and the rest keep their embeds unless a server relay is up.
+
+Build it and load it unpacked:
+
+```sh
+bun run build:extension   # writes dist-extension/
+```
+
+Then open `chrome://extensions`, turn on Developer mode, click "Load unpacked" and pick `dist-extension/`. Reload Regie: the help sheet says "Regie extension connected".
+
+- **A server relay wins.** When a relay is set in the help sheet and answers, every tile it can play goes through it; the extension takes the Twitch tiles only when no relay is up.
+- **No extension, no change.** Without it (or once it is disabled or reloaded), Twitch tiles keep their official embed, and a stream the extension can't play falls back to its embed in place.
+- **Twitch embeds keep their ad in a background tab.** On Regie's pages, the extension makes the embedded Twitch players see a visible tab, so an ad on an embed (a fallback, a clip) keeps running to its end when you switch tabs.
+
+What it asks for, and why:
+
+| Permission                                                       | Why                                                                                                   |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `gql.twitch.tv`, `usher.ttvnw.net`, `*.ttvnw.net`                | The anonymous playback token and the playlists, as the relay asks for them.                           |
+| `*.cloudfront.net`                                               | Twitch also serves playlists and segments from CloudFront.                                            |
+| `declarativeNetRequest`                                          | Adds `Access-Control-Allow-Origin` to Twitch's video responses, only for requests from Regie's pages. |
+| `maxgfr.github.io`, `localhost:5173`, `localhost:4173` (scripts) | The bridge between Regie's page and the extension, and the visible-tab fix in Twitch's player there.  |
+| `player.twitch.tv` (script)                                      | The visible-tab fix runs there, and acts only when the player is embedded in Regie.                   |
+
+It reads no cookies and sends no account: like the relay, everything stays anonymous.
+
 ## Privacy
 
 There is no account, server or analytics. The page talks to:

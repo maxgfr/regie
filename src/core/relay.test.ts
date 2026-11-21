@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import { capabilities } from '../platforms/parse.ts'
-import { healthUrl, normalizeRelayBase, parseHealth, relayable, relayUrl } from './relay.ts'
+import {
+  healthUrl,
+  normalizeRelayBase,
+  parseHealth,
+  pickRelay,
+  type RelayHealth,
+  relayable,
+  relayUrl,
+} from './relay.ts'
 
 describe('relay', () => {
   test('only Twitch, YouTube and Kick go through the relay', () => {
@@ -28,6 +36,25 @@ describe('relay', () => {
     expect(relayable({ platform: 'twitch', kind: 'clip', id: 'Funny' }, true, ['twitch'])).toBe(false)
     expect(relayable(kick, true, null)).toBe(true)
     expect(relayable(kick, true, [])).toBe(false)
+  })
+
+  test('the server relay wins when it is up; the extension takes the Twitch tiles otherwise', () => {
+    const twitch = { platform: 'twitch' as const, kind: 'live' as const, id: 'shroud' }
+    const kick = { platform: 'kick' as const, kind: 'live' as const, id: 'xqc' }
+    const clip = { platform: 'twitch' as const, kind: 'clip' as const, id: 'Funny' }
+    const server: RelayHealth = { ytdlp: '2026.10.26', ffmpeg: '7.1', platforms: null }
+    const extension: RelayHealth = { ytdlp: null, ffmpeg: null, platforms: ['twitch'] }
+    expect(pickRelay(twitch, { server, extension })).toBe('server')
+    expect(pickRelay(kick, { server, extension })).toBe('server')
+    expect(pickRelay(twitch, { server: null, extension })).toBe('extension')
+    expect(pickRelay(kick, { server: null, extension })).toBeNull()
+    expect(pickRelay(clip, { server: null, extension })).toBeNull()
+    expect(pickRelay(twitch, { server: null, extension: null })).toBeNull()
+    // A server that doesn't play Twitch leaves it to the extension.
+    expect(pickRelay(twitch, { server: { ...server, platforms: ['youtube'] }, extension })).toBe('extension')
+    // An extension that doesn't list its platforms is still Twitch only.
+    expect(pickRelay(kick, { server: null, extension: { ...extension, platforms: null } })).toBeNull()
+    expect(pickRelay(twitch, { server: null, extension: { ...extension, platforms: null } })).toBe('extension')
   })
 
   test('the typed address is cleaned', () => {

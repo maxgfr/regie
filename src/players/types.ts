@@ -1,3 +1,4 @@
+import type { RelayReply } from '../core/extension-protocol.ts'
 import type { Source } from '../core/types.ts'
 
 export type PlaybackState = 'loading' | 'playing' | 'paused' | 'buffering' | 'ended' | 'offline'
@@ -34,8 +35,20 @@ export interface PlayerContext {
   /** Volume to start with, so autoplay is muted until the page has had a user gesture. */
   initialVolume: number
   /**
-   * The viewer's relay, when it is up: a source it supports plays from it in a `<video>`. `remux`: it can
-   * remux YouTube videos. `onFail`: the stream never started there, so the official embed takes over.
+   * The relay to play from, when one is up: a source it supports plays from it in a `<video>`. `server`:
+   * the viewer's own relay at `base`; `extension`: the Regie browser extension, through its bridge.
+   * `remux`: it can remux YouTube videos; `platforms`: what it plays (null: all). `onFail`: the stream never
+   * started there, so the official embed takes over.
    */
-  relay?: { base: string; key: string; remux: boolean; onFail(): void }
+  relay?: PlayerRelay
 }
+
+interface RelayCommon {
+  remux: boolean
+  platforms: readonly string[] | null
+  onFail(): void
+}
+
+export type PlayerRelay =
+  | (RelayCommon & { kind: 'server'; base: string; key: string })
+  | (RelayCommon & { kind: 'extension'; load(path: string, timeoutMs: number): Promise<RelayReply> })
