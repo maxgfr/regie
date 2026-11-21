@@ -12,6 +12,7 @@ import {
   RELOAD_GAP_MS,
   STALL_MS,
   shouldReload,
+  shouldWake,
 } from './ads.ts'
 import { mixAudio, standIn } from './audio.ts'
 import { decayHype, initialHype, recordMessage, spike } from './hype.ts'
@@ -203,6 +204,20 @@ describe('ads', () => {
     expect(adblockSuspect({ since: 0, retried: true, offline: true }, BLOCKED_AFTER_MS + 1)).toBe(false)
     expect(adblockSuspect({ since: 0, retried: true }, BLOCKED_AFTER_MS)).toBe(false)
     expect(adblockSuspect({}, BLOCKED_AFTER_MS + 1)).toBe(false)
+  })
+
+  test('back on the page, a player Twitch stopped in the background is woken', () => {
+    // An ad Twitch paused while nobody saw it, or a stream it stopped.
+    expect(shouldWake({ played: true, state: 'playing', inAd: true })).toBe(true)
+    expect(shouldWake({ played: true, state: 'paused', inAd: false })).toBe(true)
+    expect(shouldWake({ played: true, state: 'buffering', inAd: false })).toBe(true)
+    // Playing its stream: nothing to do.
+    expect(shouldWake({ played: true, state: 'playing', inAd: false })).toBe(false)
+    // Never started (autoplay refused, waiting its turn), paused by the viewer, or nothing to play.
+    expect(shouldWake({ played: false, state: 'paused', inAd: true })).toBe(false)
+    expect(shouldWake({ played: true, state: 'paused', inAd: false, pausedByViewer: true })).toBe(false)
+    expect(shouldWake({ played: true, state: 'offline', inAd: false })).toBe(false)
+    expect(shouldWake({ played: true, state: 'ended', inAd: true })).toBe(false)
   })
 })
 

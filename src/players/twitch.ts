@@ -7,6 +7,7 @@ import {
   type Quality,
   recordStall,
 } from '../core/quality.ts'
+import { initialTwitchAdState, type TwitchUpdate, twitchAdStep, twitchAdVisibility } from '../core/twitch-ads.ts'
 import { loadScript } from './load-script.ts'
 import type { Player, PlayerContext } from './types.ts'
 
@@ -51,34 +52,18 @@ const SCRIPT = 'https://player.twitch.tv/js/embed/v1.js'
 export const TWITCH_MIN_WIDTH = 400
 export const TWITCH_MIN_HEIGHT = 300
 
-/**
- * Ads, as the player's state messages show them (observed, undocumented):
- * - `Playing` while the stream's own clock stands still: a mid-roll plays over it ("commercial break in
- *   progress"), its clock frozen for `AD_FROZEN_MS`. Live streams only.
- * - `Playing` with no broadcaster latency: a pre-roll plays (a live stream reports how far behind the
- *   broadcaster it is; an ad has no broadcaster). A stream that shows no latency for longer than any ad
- *   break (`AD_BREAK_MAX_MS`) simply doesn't report one: from then on, a latency of 0 means nothing for it.
- * - `Playing` while the broadcaster latency hasn't moved for `AD_LATENCY_FROZEN_MS`, the clock running: the
- *   "commercial break in progress" slate. The stream reports a new latency every two or three seconds; the
- *   slate keeps the last one (observed: 2.367 s for 25 s and more, never above 3 s on a stream).
- * Both held for `AD_RUNNING_MS`.
- * - `Buffering` while the buffer holds many seconds: the stream waits behind an ad that doesn't move. A real
- *   stall has an empty buffer. Held for `AD_STUCK_MS`.
- *
- * A paused player is never an ad (it reads `Idle`, frames still counted for a few seconds), and nothing is
- * read while the page is hidden: the browser and Twitch pause what nobody sees. A wrong "ad" moves the
- * sound away and may reload the player, so every signal errs on the side of "not an ad".
- */
-export const AD_RUNNING_MS = 3000
-export const AD_FROZEN_MS = 2000
-export const AD_LATENCY_FROZEN_MS = 6000
-/** A latency older than this isn't fresh: what plays may not be the stream itself. */
-const LATENCY_STALE_MS = 4000
-export const AD_BREAK_MAX_MS = 200_000
-export const AD_STUCK_MS = 8000
-/** Without any signal for this long, an ad is over even if the stream isn't playing yet. */
-export const AD_GONE_MS = 3000
-export const AD_MIN_BUFFER_S = 10
+// How ads show in the player's state messages: see `core/twitch-ads.ts`.
+export {
+  AD_BREAK_MAX_MS,
+  AD_FROZEN_MS,
+  AD_GONE_MS,
+  AD_LATENCY_FROZEN_MS,
+  AD_MIN_BUFFER_S,
+  AD_RUNNING_MS,
+  AD_STUCK_MS,
+  adSignature,
+} from '../core/twitch-ads.ts'
+
 /** Below this much buffer, a rebuffer is a real stall: the connection didn't keep up. */
 const STALL_BUFFER_S = 0.5
 /** Leave the quality change a moment to settle before reading a rebuffer as a stall. */
@@ -113,19 +98,10 @@ export function createTwitchPlayer(context: PlayerContext): Player {
   let frame: HTMLIFrameElement | null = null
 
   // The player iframe reports its full state to the page about twice a second: the only ad signal an embed
-  // gets (see `adSignature`).
+  // gets (see `core/twitch-ads.ts`).
+  let ads = initialTwitchAdState(Date.now())
   let inAd = false
-  let adKind: AdSignature = null
-  let adSince = 0
   let lastPlayback = ''
-  let latencyKnown = false
-  let latencyless = false
-  // The stream's own clock: it stands still while an ad plays over it.
-  let lastTime: number | undefined
-  let timeMovedAt = Date.now()
-  // The broadcaster latency: it stands still while the "commercial break" slate plays.
-  let lastLatency: number | undefined
-  let latencyMovedAt = Date.now()
   const live = source.kind !== 'vod'
   // Since when the stream itself (not an ad) has been playing without a break.
   let contentSince: number | null = null
@@ -193,10 +169,7 @@ export function createTwitchPlayer(context: PlayerContext): Player {
     const update = readUpdate(event.data)
     if (!update) return
     const now = Date.now()
-    if (update.latency && update.latency > 0) {
-      latencyKnown = true
-      events.latency(update.latency)
-    }
+    if (update.latency && update.latency > 0) events.latency(update.latency)
     // A rebuffer with an empty buffer at a quality Regie forced: the connection may not keep up with it.
     if (update.playback === 'Buffering' && lastPlayback === 'Playing' && quality !== 'auto' && !inAd) {
       if (now - switchedAt > SWITCH_SETTLE_MS && (update.buffer ?? 0) < STALL_BUFFER_S) {
@@ -206,25 +179,18 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       }
     }
     lastPlayback = update.playback
-    if (update.time !== undefined && update.time !== lastTime) {
-      lastTime = update.time
-      timeMovedAt = now
-    }
-    const frozenMs = update.playback === 'Playing' && update.time !== undefined ? now - timeMovedAt : 0
-    // Only counted while playing: a latency kept through a pause says nothing.
-    if (update.playback !== 'Playing' || update.latency !== lastLatency) {
-      lastLatency = update.latency
-      latencyMovedAt = now
-    }
-    const latencyFrozenMs = live && update.latency && update.latency > 0 ? now - latencyMovedAt : 0
-    const content =
-      update.playback === 'Playing' &&
-      frozenMs < AD_FROZEN_MS &&
-      latencyFrozenMs < LATENCY_STALE_MS &&
-      (!live || update.latency === undefined || update.latency > 0)
+    const switchExpired = switching && now - switchedAt > SWITCH_GRACE_MS
+    const step = twitchAdStep(ads, update, {
+      now,
+      hidden: document.hidden,
+      live,
+      switching: switching && !switchExpired,
+    })
+    ads = step.state
+    const { content } = step
     contentSince = content ? (contentSince ?? now) : null
     if (switching && content && update.time) switching = false
-    else if (switching && now - switchedAt > SWITCH_GRACE_MS) {
+    else if (switchExpired) {
       switching = false
       // Twitch sometimes stays stuck after a switch until someone clicks the player: start it again.
       if (update.playback !== 'Playing') {
@@ -235,18 +201,7 @@ export function createTwitchPlayer(context: PlayerContext): Player {
         }
       }
     }
-    const signature =
-      document.hidden || switching
-        ? null
-        : adSignature(update, { live, zeroLatencyIsAd: !latencyless, frozenMs, latencyFrozenMs })
-    if (signature !== adKind) {
-      adKind = signature
-      adSince = now
-    }
-    if (adKind === 'running' && !latencyKnown && now - adSince > AD_BREAK_MAX_MS) latencyless = true
-    const held = adKind !== null && now - adSince >= (adKind === 'running' ? AD_RUNNING_MS : AD_STUCK_MS)
-    const gone = adKind === null && now - adSince >= AD_GONE_MS
-    const ad = held ? true : content || gone ? false : inAd
+    const ad = step.inAd
     if (ad !== inAd) {
       inAd = ad
       if (!ad) playing = true
@@ -274,6 +229,12 @@ export function createTwitchPlayer(context: PlayerContext): Player {
     }
   }
   window.addEventListener('message', onMessage)
+  // Twitch may post nothing while the page is hidden: the switch is marked anyway, so the clocks measured in
+  // the background are never read as an ad, nor as its end.
+  const onVisibility = () => {
+    ads = twitchAdVisibility(ads, document.hidden, Date.now())
+  }
+  document.addEventListener('visibilitychange', onVisibility)
 
   loadScript(SCRIPT)
     .then(() => {
@@ -361,47 +322,10 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       clearInterval(timer)
       clearTimeout(fitTimer)
       window.removeEventListener('message', onMessage)
+      document.removeEventListener('visibilitychange', onVisibility)
       element.remove()
     },
   }
-}
-
-interface TwitchUpdate {
-  playback: string
-  fps: number
-  /** The stream's own clock, in seconds. */
-  time?: number
-  /** Seconds of video buffered ahead. */
-  buffer?: number
-  latency?: number
-  muted?: boolean
-  volume?: number
-}
-
-type AdSignature = 'running' | 'stuck' | null
-
-/**
- * Which ad signature a state message shows, if any (see `AD_RUNNING_MS` and `AD_STUCK_MS`). `zeroLatencyIsAd`:
- * false for a stream that never reports a latency. `frozenMs`: how long the stream's clock has stood still
- * while playing. `latencyFrozenMs`: how long the broadcaster latency has stood still while playing.
- */
-export function adSignature(
-  update: TwitchUpdate | null,
-  {
-    live = true,
-    zeroLatencyIsAd = true,
-    frozenMs = 0,
-    latencyFrozenMs = 0,
-  }: { live?: boolean; zeroLatencyIsAd?: boolean; frozenMs?: number; latencyFrozenMs?: number } = {},
-): AdSignature {
-  if (!update) return null
-  if (live && update.playback === 'Playing' && update.fps > 0) {
-    if (frozenMs >= AD_FROZEN_MS) return 'running'
-    if (latencyFrozenMs >= AD_LATENCY_FROZEN_MS) return 'running'
-    if (zeroLatencyIsAd && update.latency === 0) return 'running'
-  }
-  if (update.playback === 'Buffering' && (update.buffer ?? 0) >= AD_MIN_BUFFER_S) return 'stuck'
-  return null
 }
 
 /** Reads the `UPDATE_STATE` message the Twitch player iframe posts to its host page. */

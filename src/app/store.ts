@@ -11,6 +11,8 @@ import {
   noteAd,
   type ReloadMemory,
   shouldReload,
+  shouldWake,
+  WAKE_AFTER_MS,
 } from '../core/ads.ts'
 import { mixAudio } from '../core/audio.ts'
 import {
@@ -177,6 +179,10 @@ export class Store extends TypedEventTarget<Events> {
     for (const type of ['pointerdown', 'keydown'] as const) window.addEventListener(type, unlock, { capture: true })
     // A click inside a player iframe also activates the page.
     window.addEventListener('blur', () => setTimeout(unlock, 50))
+    document.addEventListener('visibilitychange', () => {
+      clearTimeout(this.#wakeTimer)
+      if (!document.hidden) this.#wakeTimer = setTimeout(() => this.#wake(), WAKE_AFTER_MS)
+    })
     setInterval(() => this.#tick(), 1000)
     setInterval(() => this.#releaseChat(), 250)
     setInterval(() => this.refreshInfo(), 60_000)
@@ -1082,18 +1088,39 @@ export class Store extends TypedEventTarget<Events> {
    */
   #resumePaused(now: number) {
     if (this.#holding || document.hidden) return
-    const fullscreen = document.fullscreenElement
     for (const [id, runtime] of this.runtime) {
       if (runtime.state !== 'paused' || !runtime.played || runtime.pausedAt === undefined) continue
-      if (now - runtime.pausedAt < RESUME_AFTER_MS || now - (runtime.resumedAt ?? 0) < RESUME_EVERY_MS) continue
-      if (!this.embedTwitch(id)) continue
-      const container = this.#containers.get(id)
-      if (fullscreen && container && !fullscreen.contains(container)) continue
-      const player = this.players.get(id)
-      if (!player) continue
-      runtime.resumedAt = now
-      safely(() => player.play())
+      if (now - runtime.pausedAt < RESUME_AFTER_MS) continue
+      this.#restart(id, runtime, now)
     }
+  }
+
+  #wakeTimer: ReturnType<typeof setTimeout> | undefined
+
+  /**
+   * Back on the page: Twitch may have stopped a player in the background, an ad in the middle of it (an ad
+   * nobody sees doesn't count down), and an ad that stands still reads as no ad at all. Each such player gets
+   * one `play()`. The ad verdict is left to the player's own messages.
+   */
+  #wake() {
+    if (this.#holding || document.hidden) return
+    const now = Date.now()
+    for (const [id, runtime] of this.runtime) {
+      const { played, state, pausedByViewer } = runtime
+      if (shouldWake({ played, state, pausedByViewer, inAd: runtime.ad.inAd })) this.#restart(id, runtime, now)
+    }
+  }
+
+  /** One `play()` to an official Twitch player that stopped on its own, if it can be seen and wasn't just sent one. */
+  #restart(id: string, runtime: TileRuntime, now: number) {
+    if (now - (runtime.resumedAt ?? 0) < RESUME_EVERY_MS || !this.embedTwitch(id)) return
+    const container = this.#containers.get(id)
+    const fullscreen = document.fullscreenElement
+    if (fullscreen && container && !fullscreen.contains(container)) return
+    const player = this.players.get(id)
+    if (!player) return
+    runtime.resumedAt = now
+    safely(() => player.play())
   }
 
   /** Moves every seekable tile by the same amount, keeping their offsets (multi-POV replays). */

@@ -127,3 +127,26 @@ export function noteAd(memory: ReloadMemory, watched: boolean, now: number): Rel
   if (memory.at === undefined || watched || now - memory.at > RELOAD_GAP_MS) return memory
   return { ...memory, failedAt: now }
 }
+
+/**
+ * Back on a page that was hidden, after this long (Twitch resumes some players on its own, and the layout
+ * settles), players Twitch stopped in the background get one `play()`.
+ */
+export const WAKE_AFTER_MS = 1500
+
+/**
+ * Twitch stops a player it can't see, ad included (an ad nobody sees doesn't count down), and doesn't always
+ * start it again when the page comes back. A player that has played gets a `play()` if it is in an ad (it
+ * may stand still; `play()` changes nothing on one that runs) or isn't playing. Not one the viewer paused
+ * themselves, nor one with nothing to play.
+ */
+export function shouldWake(input: {
+  played?: boolean
+  state: string
+  inAd: boolean
+  pausedByViewer?: boolean
+}): boolean {
+  if (!input.played || input.pausedByViewer) return false
+  if (input.state === 'offline' || input.state === 'ended') return false
+  return input.inAd || input.state !== 'playing'
+}

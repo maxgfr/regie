@@ -219,6 +219,55 @@ test('a Twitch player that stops on its own is started again, unless the wall wa
   expect((await plays())[1]).toBe(held[1])
 })
 
+/** The viewer switches to another tab and back: the page is told it is hidden, then visible. */
+function setHidden(page: Page, hidden: boolean) {
+  return page.evaluate((hidden) => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden })
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => (hidden ? 'hidden' : 'visible'),
+    })
+    document.dispatchEvent(new Event('visibilitychange'))
+  }, hidden)
+}
+
+test('an ad keeps its verdict while the tab is hidden, and its player is started again on return', async ({ page }) => {
+  await twitchWall(page, [0, 1])
+  await page.clock.fastForward(40_000)
+  await twitchAd(page, 0)
+  const first = page.locator('[data-tile]').first()
+  await expect(first).toHaveAttribute('data-ad', 'true')
+  await expect(page.locator('[data-tile]').nth(1)).toHaveAttribute('data-tally', 'pgm')
+  const plays = () =>
+    page.evaluate(() => (window as unknown as { __players: FakePlayer[] }).__players.map((p) => p.plays ?? 0))
+  // Another tab in front for 30 s: Twitch stops the ad, its messages say nothing about it.
+  await setHidden(page, true)
+  for (let i = 0; i < 6; i++) {
+    await twitchUpdate(page, 0, { playback: 'Idle', stats: { videoStats: { fps: 0 } }, muted: true })
+    await page.clock.fastForward(5000)
+  }
+  await expect(first).toHaveAttribute('data-ad', 'true')
+  await expect(page.locator('[data-tile]').nth(1)).toHaveAttribute('data-tally', 'pgm')
+  const before = await plays()
+  await setHidden(page, false)
+  await page.clock.fastForward(2000)
+  // The player stopped in its ad gets a play(); the one playing its stream is left alone.
+  await expect.poll(async () => (await plays())[0]).toBeGreaterThan(before[0] ?? 0)
+  expect((await plays())[1]).toBe(before[1])
+  await expect(first).toHaveAttribute('data-ad', 'true')
+  // The ad was over: the stream itself plays, its clock and latency moving.
+  for (let i = 0; i < 8; i++) {
+    await twitchUpdate(page, 0, {
+      playback: 'Playing',
+      currentTime: 100 + i / 2,
+      stats: { videoStats: { fps: 30, hlsLatencyBroadcaster: 2 + (i % 3) / 10 } },
+      muted: true,
+    })
+    await page.clock.fastForward(500)
+  }
+  await expect(first).toHaveAttribute('data-ad', 'false')
+})
+
 test('sync mode marks streams from the label strip', async ({ page }) => {
   await page.goto('/#s=kk.one|kk.two')
   await page.locator('#stage').click({ position: { x: 2, y: 2 } })
