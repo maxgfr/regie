@@ -59,25 +59,25 @@ Built for the evening when a tournament runs on five channels at once: the main 
   - A shortcut opens creator search.
   - The interface works offline, though the streams need the network.
   - English and French. The screen stays awake while streams play.
-- **In the background.** Streams keep playing in a background tab or a minimised window. On phones, the system pauses other sites' players when the browser leaves the screen, and no web page can prevent that: keep Regie in front, or use the mini control room on a computer.
+- **In the background.** Streams keep playing in a background tab or a minimised window. Twitch pauses an ad on an official embed while the tab is hidden (an ad nobody sees doesn't count down): Regie keeps the sound away from it meanwhile and starts it again when you come back. With the [extension](#browser-extension-optional), Twitch tiles play through it, and embeds keep their ad running in a background tab. On phones, the system pauses other sites' players when the browser leaves the screen, and no web page can prevent that: keep Regie in front, or use the mini control room on a computer.
 
 ## What a web page can't do
 
-Without the relay, Regie only uses official embeds, so it can only do what each player allows. The last row is a tile played through the [relay](#ad-free-relay-optional):
+Without the relay or the extension, Regie only uses official embeds, so it can only do what each player allows. The last row is a tile played through the [relay](#ad-free-relay-optional) or the [extension](#browser-extension-optional):
 
-| Platform       | Volume                         | Seek / delay     | Chat                    | Notes                                                                      |
-| -------------- | ------------------------------ | ---------------- | ----------------------- | -------------------------------------------------------------------------- |
-| Twitch         | ✓                              | VODs only        | official frame + merged | live latency and ad state from the player                                  |
-| YouTube        | ✓                              | ✓ (live DVR too) | official frame          | titles through oEmbed                                                      |
-| Kick           | mute only (reloads the player) | –                | official frame          | live status through Kick's public API                                      |
-| TikTok         | mute only                      | ✓                | –                       | videos only: **TikTok LIVE can't be embedded**, it opens in its own window |
-| Vimeo          | ✓                              | –                | –                       |                                                                            |
-| Dailymotion    | mute only (reload)             | –                | –                       |                                                                            |
-| HLS / MP4 link | ✓                              | ✓                | –                       | played with hls.js where HLS isn't native                                  |
-| Through relay  | ✓                              | ✓ (lives too)    | unchanged               | Twitch live and VODs, YouTube, Kick: no ads, latency measured, hls.js      |
+| Platform                  | Volume                         | Seek / delay     | Chat                    | Notes                                                                                              |
+| ------------------------- | ------------------------------ | ---------------- | ----------------------- | -------------------------------------------------------------------------------------------------- |
+| Twitch                    | ✓                              | VODs only        | official frame + merged | live latency and ad state from the player                                                          |
+| YouTube                   | ✓                              | ✓ (live DVR too) | official frame          | titles through oEmbed                                                                              |
+| Kick                      | mute only (reloads the player) | –                | official frame          | live status through Kick's public API                                                              |
+| TikTok                    | mute only                      | ✓                | –                       | videos only: **TikTok LIVE can't be embedded**, it opens in its own window                         |
+| Vimeo                     | ✓                              | –                | –                       |                                                                                                    |
+| Dailymotion               | mute only (reload)             | –                | –                       |                                                                                                    |
+| HLS / MP4 link            | ✓                              | ✓                | –                       | played with hls.js where HLS isn't native                                                          |
+| Through relay / extension | ✓                              | ✓ (lives too)    | unchanged               | Twitch live and VODs, YouTube, Kick (the extension: Twitch only): no ads, latency measured, hls.js |
 
-- **Ads can't be blocked from a page alone.** Players are other sites, and Twitch puts its ads inside the video itself. Every site that embeds Twitch's player shows its ads. With the embeds, Regie moves the sound away from an ad instead. To get rid of them, run the optional [ad-free relay](#ad-free-relay-optional).
-- **Extensions, without the relay.** An ad blocker such as [uBlock Origin](https://ublockorigin.com/) works inside Regie's YouTube frames. [TTV LOL PRO](https://github.com/younesaassila/ttv-lol-pro) doesn't act on Regie's embedded Twitch players: it only handles requests from `www.twitch.tv` and `m.twitch.tv` pages.
+- **Ads can't be blocked from a page alone.** Players are other sites, and Twitch puts its ads inside the video itself. Every site that embeds Twitch's player shows its ads. With the embeds, Regie moves the sound away from an ad instead. To get rid of them, run the optional [ad-free relay](#ad-free-relay-optional) or install the [Regie extension](#browser-extension-optional).
+- **Extensions, without the relay.** An ad blocker such as [uBlock Origin](https://ublockorigin.com/) works inside Regie's YouTube frames. [TTV LOL PRO](https://github.com/younesaassila/ttv-lol-pro) doesn't act on Regie's embedded Twitch players: it only handles requests from `www.twitch.tv` and `m.twitch.tv` pages. The [Regie extension](#browser-extension-optional) does act on Twitch inside Regie: it runs the same engine as the relay.
 - **Twitch ads wait for a click.** Twitch starts its ads paused. A page can't click inside another site's player, and the player API's `play()` doesn't start an ad either: one click on play in that player does.
 - **Some Twitch channels ask for a click too.** If a channel carries a mature-content warning, Twitch waits for a click on "Start watching" in that player. Twitch also refuses to autoplay a player that is covered, so nothing in Regie is ever drawn over a player.
 
@@ -188,10 +188,11 @@ Twitch's GraphQL endpoint is undocumented. If it changes, search and live status
 
 ```sh
 bun install
-bun run dev        # http://localhost:5173
-bun run check      # typecheck, Biome, unit tests, build
-bun run test:e2e   # Playwright + axe on the build, with every player stubbed
-bun run relay      # the optional ad-free relay, on http://127.0.0.1:7878
+bun run dev               # http://localhost:5173
+bun run check             # typecheck, Biome, unit tests, build, extension build
+bun run test:e2e          # Playwright + axe on the build, with every player stubbed
+bun run relay             # the optional ad-free relay, on http://127.0.0.1:7878
+bun run build:extension   # the optional Chrome extension, in dist-extension/
 ```
 
 Stack:
@@ -208,7 +209,8 @@ src/
   chat/        anonymous read-only Twitch chat
   app/         the store (state, audio director, chat queue) and the local library
   ui/          Remix components: stage, monitors, vision mixer console, chat dock, library, test card
-relay/         the optional ad-free relay: a Bun server, Twitch tokens and ad breaks, yt-dlp and ffmpeg
+relay/         the optional ad-free relay: a Bun server, Twitch tokens and ad breaks, yt-dlp and ffmpeg; its engine (handler.ts, stream.ts, twitch.ts) is shared with the extension
+extension/     the optional Chrome extension: the relay's engine in a service worker (Twitch), the page bridge
 ```
 
 Automation:
