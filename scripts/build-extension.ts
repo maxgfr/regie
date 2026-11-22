@@ -49,7 +49,12 @@ const builds = [
   { entrypoints: ['./extension/background.ts'], format: 'esm' as const },
   // Content scripts are classic scripts.
   {
-    entrypoints: ['./extension/bridge.ts', './extension/twitch-visible.ts', './extension/twitch-site.ts'],
+    entrypoints: [
+      './extension/bridge.ts',
+      './extension/twitch-visible.ts',
+      './extension/twitch-site.ts',
+      './extension/twitch-player.ts',
+    ],
     format: 'iife' as const,
   },
 ]
@@ -60,6 +65,8 @@ for (const build of builds) {
     outdir: out,
     target: 'browser',
     naming: '[name].js',
+    // `twitch-player.js` carries hls.js, on every twitch.tv page.
+    minify: true,
     define: { __REGIE_WORKER__: JSON.stringify(workerCode) },
   })
   if (!result.success) failed(result)

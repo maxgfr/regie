@@ -41,6 +41,11 @@
       "js": ["twitch-site.js"],
       "world": "MAIN",
       "run_at": "document_start"
+    },
+    {
+      "matches": ["https://www.twitch.tv/*"],
+      "js": ["twitch-player.js"],
+      "run_at": "document_idle"
     }
   ],
   "declarative_net_request": {

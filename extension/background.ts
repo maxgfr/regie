@@ -44,10 +44,12 @@ async function answer(url: string): Promise<RelayReply> {
   return { status: response.status, headers, body: await response.text() }
 }
 
+/** Our own scripts ask from Regie's pages (the bridge) and from Twitch's site (`twitch-player.ts`). */
+const ASKING_ORIGINS = [...EXTENSION_ORIGINS, 'https://www.twitch.tv']
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!isRelayRequest(message)) return undefined
-  // Only our own bridge, on a Regie page.
-  if (sender.id !== chrome.runtime.id || (sender.origin && !EXTENSION_ORIGINS.includes(sender.origin))) return undefined
+  if (sender.id !== chrome.runtime.id || (sender.origin && !ASKING_ORIGINS.includes(sender.origin))) return undefined
   answer(message.url).then(sendResponse, () => sendResponse({ status: 502, headers: {}, body: '' }))
   return true
 })

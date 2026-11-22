@@ -19,7 +19,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "test": "bun test src relay",
+    "test": "bun test src relay extension",
     "relay": "bun relay/server.ts",
     "test:e2e": "bunx playwright test",
     "check": "bun run typecheck && bun run lint && bun run test && bun run build && bun run build:extension",
