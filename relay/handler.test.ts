@@ -81,10 +81,12 @@ describe('portable handler', () => {
     expect((await get(h, '/nope')).status).toBe(404)
   })
 
-  test('the server reports what it plays: Twitch always, YouTube and Kick with yt-dlp', async () => {
+  test('the server reports what it plays: Twitch, Kick and YouTube videos always, YouTube lives with yt-dlp', async () => {
     const server = createHandler(configFromEnv({}))
     relays.push(server.relay)
     const body = await (await server.fetch(new Request('http://127.0.0.1:7878/health'))).json()
-    expect(body.platforms).toEqual(body.ytdlp ? ['twitch', 'youtube', 'kick'] : ['twitch'])
+    expect(body.platforms).toEqual(['twitch', 'youtube', 'kick'])
+    expect(body.youtubeVideos).toBe(true)
+    expect(body.youtubeLive).toBe(body.ytdlp !== null)
   })
 })
