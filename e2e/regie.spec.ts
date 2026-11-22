@@ -453,6 +453,25 @@ test('a relayed stream on air gets its sound: starting muted is not the viewer m
   await page.unrouteAll({ behavior: 'ignoreErrors' })
 })
 
+test('once the page may play sound, a silent relayed stream is not muted: a background tab would pause it', async ({
+  page,
+}) => {
+  await relay(page, { health: true, play: true })
+  await page.goto('/#s=tw.alpha+tw.beta')
+  const videos = page.locator('[data-tile] video')
+  await expect(videos).toHaveCount(2)
+  const sound = () =>
+    videos.evaluateAll((elements: HTMLVideoElement[]) => elements.map((v) => ({ muted: v.muted, volume: v.volume })))
+  // Before anyone uses the page, a silent video can only autoplay muted.
+  await expect.poll(async () => (await sound()).filter((s) => s.muted).length).toBeGreaterThan(0)
+  await page.keyboard.press('Shift')
+  await expect.poll(async () => (await sound()).some((s) => s.muted)).toBe(false)
+  const silent = (await sound()).filter((s) => s.volume < 0.01)
+  expect(silent).toHaveLength(1)
+  expect(silent[0]?.volume).toBeGreaterThan(0)
+  await page.unrouteAll({ behavior: 'ignoreErrors' })
+})
+
 test('a relayed stream picks its quality by itself, or plays the one chosen under it', async ({ page }) => {
   const requests = await relay(page, { health: true, play: true, levels: true })
   await page.goto('/#s=tw.alpha')

@@ -57,6 +57,21 @@ function lockRealTime(video: HTMLVideoElement) {
 }
 
 /**
+ * The volume of a video Regie keeps silent once the page may play sound: -80 dB, inaudible, but not zero.
+ * Chrome pauses a muted, or volume 0, video when its tab goes to the background, and it comes back far behind
+ * live.
+ */
+const SILENT_VOLUME = 0.0001
+
+/**
+ * Whether the page may play sound: someone has used it (sticky user activation). Until then a silent video is
+ * `muted`, the only way it may autoplay; after, it plays at `SILENT_VOLUME`.
+ */
+function soundAllowed(): boolean {
+  return (navigator as { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive ?? false
+}
+
+/**
  * A direct `.m3u8` / `.mp4` link, or a stream from the viewer's relay, in a native video element. hls.js is
  * loaded only where HLS isn't native, or for the relay (`forceHls`).
  */
@@ -69,7 +84,7 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
   video.autoplay = true
   video.controls = true
   video.crossOrigin = 'anonymous'
-  video.muted = context.initialVolume <= 0
+  video.muted = context.initialVolume <= 0 && !soundAllowed()
   video.volume = Math.max(0, Math.min(1, context.initialVolume))
   video.style.cssText = 'width:100%;height:100%;display:block;background:#000;object-fit:contain'
   if (source.kind === 'live') lockRealTime(video)
@@ -215,10 +230,33 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
     events.userVolume(video.volume, video.muted)
   })
 
+  /** The volume Regie asks for: a silent video started `muted` only because the page couldn't play sound yet. */
+  let wanted = context.initialVolume
+  // Once someone uses the page (a click in a player's frame counts: the page loses the focus), a video Regie
+  // keeps silent stops being `muted`, or a background tab would pause it (`soundAllowed`).
+  const unlock = new AbortController()
+  const onActivation = () =>
+    setTimeout(() => {
+      if (destroyed || !soundAllowed()) return
+      unlock.abort()
+      if (wanted > 0 || !video.muted) return
+      video.volume = SILENT_VOLUME
+      video.muted = false
+      expected = { muted: video.muted, volume: video.volume }
+    }, 0)
+  if (video.muted) {
+    for (const type of ['pointerdown', 'keydown'] as const)
+      window.addEventListener(type, onActivation, { capture: true, signal: unlock.signal })
+    window.addEventListener('blur', onActivation, { signal: unlock.signal })
+  }
+
   return {
     setVolume(volume) {
-      const muted = volume <= 0
-      const level = muted ? video.volume : Math.min(1, volume)
+      wanted = volume
+      const silent = volume <= 0
+      // Silent at volume 0 once the page may play sound (`soundAllowed`), so it keeps playing in a background tab.
+      const muted = silent && !soundAllowed()
+      const level = muted ? video.volume : silent ? SILENT_VOLUME : Math.min(1, volume)
       if (muted === video.muted && level === video.volume) return
       video.muted = muted
       video.volume = level
@@ -258,6 +296,7 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
     },
     destroy() {
       destroyed = true
+      unlock.abort()
       hls?.destroy()
       video.removeAttribute('src')
       video.load()
