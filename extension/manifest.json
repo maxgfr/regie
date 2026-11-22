@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Regie relay",
-  "version": "1.0.0",
-  "description": "Plays Twitch in Regie without ads, the way the Regie relay does, with no server to run.",
+  "version": "1.1.0",
+  "description": "Plays Twitch without ads, in Regie (the way the Regie relay does, with no server to run) and on twitch.tv itself.",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -34,6 +34,12 @@
       "js": ["twitch-visible.js"],
       "world": "MAIN",
       "all_frames": true,
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://www.twitch.tv/*", "https://m.twitch.tv/*"],
+      "js": ["twitch-site.js"],
+      "world": "MAIN",
       "run_at": "document_start"
     }
   ],

@@ -130,7 +130,8 @@ export class Twitch {
     return { value: token.value, signature: token.signature }
   }
 
-  usherUrl(target: Target, token: { value: string; signature: string }): string {
+  /** `codecs`: the `supported_codecs` usher may answer with (the relay's hls.js plays H.264 only). */
+  usherUrl(target: Target, token: { value: string; signature: string }, codecs = 'avc1'): string {
     const url = new URL(
       'vod' in target
         ? `https://usher.ttvnw.net/vod/${target.vod}.m3u8`
@@ -144,7 +145,7 @@ export class Twitch {
       fast_bread: 'true',
       player_backend: 'mediaplayer',
       playlist_include_framerate: 'true',
-      supported_codecs: 'avc1',
+      supported_codecs: codecs,
       p: String(Math.floor(Math.random() * 10_000_000)),
       play_session_id: randomId(32),
     }
@@ -153,9 +154,9 @@ export class Twitch {
   }
 
   /** Token + usher: the master playlist. 404 when offline. */
-  async master(target: Target, access: Access): Promise<{ url: string; master: Master }> {
+  async master(target: Target, access: Access, codecs?: string): Promise<{ url: string; master: Master }> {
     const token = await this.token(target, access)
-    const url = this.usherUrl(target, token)
+    const url = this.usherUrl(target, token, codecs)
     const response = await this.#request(url, {}, access.proxy)
     if (response.status === 404) throw new UpstreamError(404, 'Offline')
     if (!response.ok) throw new UpstreamError(502, `Twitch usher ${response.status}`)
@@ -180,13 +181,14 @@ export class Twitch {
   /**
    * Looks for an ad-free stream of the same variant: the backup player types in order (the channel's last
    * winner first), then the android autoplay stream. Types that had ads in the last 15 s are skipped.
+   * `codecs` is asked of usher as the player asked it; a backup is always in the codec `wanted` is in.
    */
-  async findBackup(login: string, wanted: MasterEntry): Promise<Backup | null> {
+  async findBackup(login: string, wanted: MasterEntry, codecs?: string): Promise<Backup | null> {
     const pinned = this.pins.get(login)
     const order = [...new Set([...(pinned ? [pinned] : []), ...BACKUP_TYPES])]
     for (const playerType of order) {
       if (this.#isFailed(login, playerType)) continue
-      const backup = await this.#probe(login, wanted, this.#backupAccess({ playerType, platform: 'web' }))
+      const backup = await this.#probe(login, wanted, this.#backupAccess({ playerType, platform: 'web' }), codecs)
       if (backup) {
         this.pins.set(login, playerType)
         return backup
@@ -194,19 +196,24 @@ export class Twitch {
       this.#fail(login, playerType)
     }
     if (!this.#isFailed(login, LAST_RESORT.playerType)) {
-      const backup = await this.#probe(login, wanted, this.#backupAccess(LAST_RESORT))
+      const backup = await this.#probe(login, wanted, this.#backupAccess(LAST_RESORT), codecs)
       if (backup) return backup
       this.#fail(login, LAST_RESORT.playerType)
     }
     return null
   }
 
-  async #probe(login: string, wanted: MasterEntry, access: Access): Promise<Backup | null> {
+  async #probe(login: string, wanted: MasterEntry, access: Access, codecs?: string): Promise<Backup | null> {
     let result: string
     let backup: Backup | null = null
     try {
-      const { master } = await this.master({ login }, access)
-      const entry = matchEntry(master.entries, wanted)
+      const { master } = await this.master({ login }, access, codecs)
+      // A player's decoder is set up for one codec: an H.264 backup for an HEVC variant breaks it.
+      const family = codecFamily(wanted.attrs.CODECS)
+      const entry = matchEntry(
+        family ? master.entries.filter((candidate) => codecFamily(candidate.attrs.CODECS) === family) : master.entries,
+        wanted,
+      )
       if (!entry) result = 'no matching variant'
       else {
         const { status, text } = await this.playlist(entry.url, access.proxy)
@@ -249,6 +256,21 @@ export class Twitch {
   }
 }
 
+/**
+ * The video codec of a variant's `CODECS`: `avc`, `hevc`, `av1`, `audio` (no picture), or '' when it doesn't
+ * say (then any variant matches).
+ */
+export function codecFamily(codecs: string | undefined): string {
+  if (!codecs) return ''
+  const list = codecs.split(',').map((codec) => codec.trim().toLowerCase())
+  for (const codec of list) {
+    if (codec.startsWith('avc')) return 'avc'
+    if (codec.startsWith('hev') || codec.startsWith('hvc')) return 'hevc'
+    if (codec.startsWith('av01')) return 'av1'
+  }
+  return list.some((codec) => codec.startsWith('mp4a')) ? 'audio' : ''
+}
+
 function accessLabel(access: Access): string {
   return `${access.playerType}/${access.platform}${access.proxy ? '+proxy' : ''}`
 }
@@ -267,10 +289,12 @@ export class TwitchLiveVariant implements Upstream {
   #stripping = false
   #inBreak = false
 
+  /** `codecs`: the `supported_codecs` the player asked usher for (twitch.tv's own player), else H.264 only. */
   constructor(
     readonly twitch: Twitch,
     readonly login: string,
     readonly entry: MasterEntry,
+    readonly codecs?: string,
   ) {
     this.#url = entry.url
   }
@@ -284,7 +308,7 @@ export class TwitchLiveVariant implements Upstream {
     let { status, text } = await this.twitch.playlist(this.#url, access.proxy)
     if (status === 403 || status === 404) {
       // Expired token or new weaver session: ask usher again (404 there means offline).
-      const { master } = await this.twitch.master({ login: this.login }, access)
+      const { master } = await this.twitch.master({ login: this.login }, access, this.codecs)
       const entry = matchEntry(master.entries, this.entry)
       if (!entry) return { ok: false, status: 502 }
       this.#url = entry.url
@@ -318,7 +342,7 @@ export class TwitchLiveVariant implements Upstream {
       this.twitch.failBackup(this.login, this.#backup)
       this.#backup = null
     }
-    const backup = await this.twitch.findBackup(this.login, this.entry)
+    const backup = await this.twitch.findBackup(this.login, this.entry, this.codecs)
     if (backup) {
       this.#backup = backup
       this.#stripping = false

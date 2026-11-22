@@ -158,6 +158,7 @@ Then open `chrome://extensions`, turn on Developer mode, click "Load unpacked" a
 - **A server relay wins.** When a relay is set in the help sheet and answers, every tile it can play goes through it; the extension takes the Twitch tiles only when no relay is up.
 - **No extension, no change.** Without it (or once it is disabled or reloaded), Twitch tiles keep their official embed, and a stream the extension can't play falls back to its embed in place.
 - **Twitch embeds keep their ad in a background tab.** On Regie's pages, the extension makes the embedded Twitch players see a visible tab, so an ad on an embed (a fallback, a clip) keeps running to its end when you switch tabs.
+- **On twitch.tv too.** On `www.twitch.tv` and `m.twitch.tv`, the extension puts the same engine in the worker of Twitch's own player: during an ad break, the player gets the same quality from an ad-free stream (in the codec it plays, H.264, HEVC or AV1), or the ad cut out when every stream has it. If anything fails there, the player gets Twitch's playlist untouched: at worst you see the ad. Open the console at the "Verbose" level and filter on `[Regie]` to see what it does.
 
 What it asks for, and why:
 
@@ -167,6 +168,7 @@ What it asks for, and why:
 | `*.cloudfront.net`                                               | Twitch also serves playlists and segments from CloudFront.                                            |
 | `declarativeNetRequest`                                          | Adds `Access-Control-Allow-Origin` to Twitch's video responses, only for requests from Regie's pages. |
 | `maxgfr.github.io`, `localhost:5173`, `localhost:4173` (scripts) | The bridge between Regie's page and the extension, and the visible-tab fix in Twitch's player there.  |
+| `www.twitch.tv`, `m.twitch.tv` (script)                          | Starts Twitch's player worker with the engine first, so its media playlists come back ad-free.        |
 | `player.twitch.tv` (script)                                      | The visible-tab fix runs there, and acts only when the player is embedded in Regie.                   |
 
 It reads no cookies and sends no account: like the relay, everything stays anonymous.

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { TWITCH_MASTER, twitchLive } from './fixtures.ts'
-import { FAILED_TTL_MS, TWITCH_CLIENT_ID, Twitch, type TwitchLiveVariant } from './twitch.ts'
+import { codecFamily, FAILED_TTL_MS, TWITCH_CLIENT_ID, Twitch, type TwitchLiveVariant } from './twitch.ts'
 
 type Call = { url: string; init?: RequestInit & { proxy?: string } }
 
@@ -215,4 +215,13 @@ describe('ad replacement', () => {
       'autoplay',
     ])
   })
+})
+
+test('the video codec of a variant, for backups in the codec the player decodes', () => {
+  expect(codecFamily('avc1.64002A,mp4a.40.2')).toBe('avc')
+  expect(codecFamily('hev1.1.6.L150.90,mp4a.40.2')).toBe('hevc')
+  expect(codecFamily('hvc1.2.4.L153.B0,mp4a.40.2')).toBe('hevc')
+  expect(codecFamily('av01.0.08M.08,mp4a.40.2')).toBe('av1')
+  expect(codecFamily('mp4a.40.2')).toBe('audio')
+  expect(codecFamily(undefined)).toBe('')
 })
