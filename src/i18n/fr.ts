@@ -22,6 +22,8 @@ export const fr: Record<MessageKey, string> = {
   'console.chat': 'Chat',
   'console.sessions': 'Configs',
   'console.help': 'Aide',
+  'console.fullscreen': 'Plein écran',
+  'console.exitFullscreen': 'Quitter le plein écran',
   'console.share': 'Copier le lien',
   'console.replay': 'Replay',
   'console.playAll': 'Tout lire',

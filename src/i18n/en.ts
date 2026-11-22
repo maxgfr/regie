@@ -20,6 +20,8 @@ export const en = {
   'console.chat': 'Chat',
   'console.sessions': 'Setups',
   'console.help': 'Help',
+  'console.fullscreen': 'Full screen',
+  'console.exitFullscreen': 'Exit full screen',
   'console.share': 'Copy link',
   'console.replay': 'Replay',
   'console.playAll': 'Play all',

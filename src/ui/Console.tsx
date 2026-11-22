@@ -4,7 +4,9 @@ import {
   FastForward,
   FolderOpen,
   Link2,
+  Maximize,
   MessagesSquare,
+  Minimize,
   Pause,
   PictureInPicture2,
   Play,
@@ -94,6 +96,13 @@ export function Console(handle: Handle<{ store: Store; inputRef: (node: HTMLInpu
   let draft = ''
   let invalid = false
   const keepInput = ref((node: HTMLInputElement) => handle.props.inputRef(node))
+  // The whole control room in full screen, as on a gallery's wall (a tile has its own key in its strip).
+  const wallFullscreen = () => document.fullscreenElement === document.documentElement
+  const toggleWallFullscreen = () => {
+    if (wallFullscreen()) document.exitFullscreen().catch(() => undefined)
+    else document.documentElement.requestFullscreen?.().catch(() => undefined)
+  }
+  document.addEventListener('fullscreenchange', () => handle.update(), { signal: handle.signal })
 
   const submit = () => {
     const lines = draft
@@ -351,6 +360,13 @@ export function Console(handle: Handle<{ store: Store; inputRef: (node: HTMLInpu
               title={`${t('console.library')} (B)`}
               pressed={store.ui.libraryOpen}
               onPress={() => store.openLibrary()}
+            />
+            <Key
+              label={<Icon icon={wallFullscreen() ? Minimize : Maximize} />}
+              ariaLabel={wallFullscreen() ? t('console.exitFullscreen') : t('console.fullscreen')}
+              title={wallFullscreen() ? t('console.exitFullscreen') : t('console.fullscreen')}
+              pressed={wallFullscreen()}
+              onPress={toggleWallFullscreen}
             />
             {pipSupported() && (
               <Key
