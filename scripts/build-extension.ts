@@ -54,6 +54,7 @@ const builds = [
       './extension/twitch-visible.ts',
       './extension/twitch-site.ts',
       './extension/twitch-player.ts',
+      './extension/youtube-ads.ts',
     ],
     format: 'iife' as const,
   },
@@ -81,6 +82,8 @@ if (flags.version !== undefined && !chromeVersion(flags.version)) {
 manifest.version = chromeVersion(flags.version) ?? chromeVersion(await latestTag()) ?? manifest.version
 await Bun.write(`${out}/manifest.json`, `${JSON.stringify(manifest, null, 2)}\n`)
 await cp('extension/rules.json', `${out}/rules.json`)
+// uBlock-style blocking of ad networks, for requests from Regie, twitch.tv and Regie's YouTube embeds.
+await cp('extension/ads.json', `${out}/ads.json`)
 // Rendered from `public/icon.svg` with transparent corners by `scripts/extension-icons.ts`.
 await cp('extension/icons', `${out}/icons`, { recursive: true })
 console.log(

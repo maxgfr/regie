@@ -46,9 +46,19 @@
       "matches": ["https://www.twitch.tv/*"],
       "js": ["twitch-player.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.youtube-nocookie.com/embed/*", "https://www.youtube.com/embed/*"],
+      "js": ["youtube-ads.js"],
+      "world": "MAIN",
+      "all_frames": true,
+      "run_at": "document_start"
     }
   ],
   "declarative_net_request": {
-    "rule_resources": [{ "id": "cors", "enabled": true, "path": "rules.json" }]
+    "rule_resources": [
+      { "id": "cors", "enabled": true, "path": "rules.json" },
+      { "id": "ads", "enabled": true, "path": "ads.json" }
+    ]
   }
 }

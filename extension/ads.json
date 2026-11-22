@@ -1,0 +1,30 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "requestDomains": [
+        "doubleclick.net",
+        "googlesyndication.com",
+        "googleadservices.com",
+        "imasdk.googleapis.com",
+        "amazon-adsystem.com",
+        "adnxs.com",
+        "adsrvr.org",
+        "moatads.com",
+        "scorecardresearch.com"
+      ],
+      "initiatorDomains": ["maxgfr.github.io", "localhost", "twitch.tv", "youtube-nocookie.com"]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "regexFilter": "^https://(www\\.)?youtube(-nocookie)?\\.com/(api/stats/ads|pagead/|get_midroll_|ptracking)",
+      "initiatorDomains": ["maxgfr.github.io", "localhost", "youtube-nocookie.com"]
+    }
+  }
+]
