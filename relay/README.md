@@ -52,7 +52,7 @@ Twitch decides ads when it hands out a playback token, from your IP and the play
 1. asks for fresh anonymous tokens with other player types (`site`, `popout`, `mobile_web`, `embed`, the channel's last winner first) and serves the first ad-free stream of the same quality during the break;
 2. tries Android's `autoplay` stream (lower quality, usually ad-free) last;
 3. goes back to the main stream as soon as it is clean;
-4. if every stream has ads, cuts the ad segments out: the picture holds, the playlist says `X-Regie-Ad: 1`, and Regie moves the sound to another stream.
+4. if no stream is ad-free, cuts the ad segments out: the picture holds until the break ends. The playlist still says `X-Regie-Ad: 1`, but Regie no longer reacts to ads.
 
 A player type that had ads is left alone for 15 s. Each step is logged on one line (`ad on primary`, `probe … → clean|ad`, `serving backup …`, `back to primary`, `cutting ad segments`). To see the ad path at work, start with a player type that gets ads, for example `TWITCH_PLAYER_TYPE=embed bun run relay`. `TWITCH_PROXY` (for example a proxy in a country without Twitch ads) carries only the token, usher and playlist requests; video segments always go direct. The main stream uses the proxy and the backups go direct, so both routes get a chance.
 

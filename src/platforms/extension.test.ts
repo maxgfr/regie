@@ -133,8 +133,8 @@ describe('extension playlist addresses', () => {
   })
 
   test('a reply header is found whatever its case', () => {
-    expect(replyHeader({ 'x-regie-ad': '1' }, 'X-Regie-Ad')).toBe('1')
-    expect(replyHeader({ 'X-Regie-Ad': '0' }, 'x-regie-ad')).toBe('0')
-    expect(replyHeader({}, 'X-Regie-Ad')).toBeNull()
+    expect(replyHeader({ 'content-type': 'text/plain' }, 'Content-Type')).toBe('text/plain')
+    expect(replyHeader({ 'Content-Type': 'text/plain' }, 'content-type')).toBe('text/plain')
+    expect(replyHeader({}, 'Content-Type')).toBeNull()
   })
 })

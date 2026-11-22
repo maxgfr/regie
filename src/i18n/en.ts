@@ -26,8 +26,6 @@ export const en = {
   'console.pauseAll': 'Pause all',
   'console.back': 'Everyone back 10 s',
   'console.forward': 'Everyone forward 10 s',
-  'console.adSwitch': 'Leave ads',
-  'console.adSwitchHint': 'When the stream on air goes to an ad, the sound moves to another one',
   'console.tools': 'Tools',
   'console.empty': 'Add a stream to light the keys',
   'layout.grid': 'Grid',
@@ -40,11 +38,8 @@ export const en = {
   'tile.fullscreen': 'Full screen',
   'tile.open': 'Open on {platform}',
   'tile.remove': 'Remove',
-  'tile.ad': 'Mark as ad (A)',
-  'tile.adOff': 'End of the ad (A)',
   'tile.badgeAir': 'On air',
   'tile.badgeMain': 'Main',
-  'tile.badgeAd': 'Ad',
   'tile.badgeCover': 'Covering',
   'tile.badgeHype': 'Hype',
   'tile.badgeStart': 'Click to start',
@@ -110,7 +105,6 @@ export const en = {
   'help.k.layout': 'Next layout',
   'help.k.chat': 'Show or hide the chat',
   'help.k.sync': 'Line up the streams',
-  'help.k.ad': 'Mark or unmark an ad on the selected stream',
   'help.k.mute': 'Mute the selected stream',
   'help.k.full': 'Selected stream full screen',
   'help.k.cut': 'Cut or mix sound transitions',
@@ -120,7 +114,7 @@ export const en = {
   'help.focusNote': 'After a click inside a player, Regie takes the keyboard back so these keys keep working.',
   'help.ads': 'Ads',
   'help.adsText':
-    'A web page can’t block ads inside other sites’ players: each player is a cross-origin iframe (player.twitch.tv…), this page’s code never runs inside it, and Twitch stitches its ads into the video itself — there is nothing for the page to remove. Twitch also detects ad blockers and then refuses to play: if your own blocker is on and a stream never starts, its monitor shows “Ad blocker?” — disable the extension for this site. What Regie does instead: it detects ads, moves the sound to another stream, and shows a small one large and silent next to the main monitor until the ad ends (Twitch only counts an ad down on a large, visible player, so a stream in an ad is never hidden or covered). Twitch starts its ads paused and only runs them after a click in the player: one click on play gets it going. Keep the tab visible. Regie can also reload a player once or twice to try to skip an ad. To block ads elsewhere in your browser, an extension such as uBlock Origin is the only effective tool — but expect Twitch to notice it. The only officially ad-free option on Twitch itself is a Turbo subscription.',
+    'A web page can’t block ads inside other sites’ players: each player is a cross-origin iframe (player.twitch.tv…), this page’s code never runs inside it, and Twitch stitches its ads into the video itself. To watch Twitch without ads, use the relay or the Regie extension below: the stream then plays in Regie’s own player. Twitch also detects ad blockers and then refuses to play: if your own blocker is on and a stream never starts, its monitor shows “Ad blocker?” — disable the blocker for this site.',
   'help.platforms': 'What each platform allows',
   'help.platformsText':
     'Twitch: volume, VOD seek, live latency. YouTube: volume and seek, live included. TikTok: mute and seek, videos only (TikTok LIVE opens in its own window). Kick and Dailymotion: mute only, by reloading the player. Vimeo: volume.',
@@ -186,9 +180,7 @@ export const en = {
   'console.install': 'Install Regie as an app',
   'help.k.pip': 'Mini control room (always on top, keeps playing while you use other apps)',
   'toast.noPip': 'This browser can’t open a page in picture-in-picture (Chrome and Edge on a computer can).',
-  'ad.notice':
-    '{name} is in an ad: it stays large and silent until the stream comes back. If the countdown doesn’t move, click play in its player',
-  'ad.blockedNotice':
+  'adblock.notice':
     '{name} won’t start on its own: click play in the player. If it still won’t play, an ad blocker is the likely cause — Twitch refuses to play with one, disable it for this site',
   'help.background': 'In the background',
   'help.backgroundText':
@@ -202,9 +194,6 @@ export const en = {
   'library.notifyHint': 'A system notification when a favourite goes live while Regie is in the background.',
   'library.notifyOn': 'Notifications on',
   'tile.badgeOffline': 'Offline',
-  'help.adReload': 'Reload a player that goes to an ad',
-  'help.adReloadHint':
-    'Off by default: a reload cuts the stream for a few seconds. When on, only for a confirmed mid-roll: a fresh player sometimes comes back without it. Once every five minutes at most, and if the fresh player opens on an ad again, the ads of that stream simply play for a while.',
   'relay.title': 'Ad-free relay',
   'relay.text':
     'Optional. A small server you run yourself plays Twitch, YouTube and Kick streams without their ads, with full sound and seek control, so Twitch and Kick lives can be lined up too. Other links keep their official player, and without a relay Regie works as usual.',

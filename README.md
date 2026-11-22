@@ -1,6 +1,6 @@
 # Regie
 
-**A control room for watching several streams at once.** Put Twitch, YouTube, Kick, TikTok, Vimeo, Dailymotion and direct HLS/MP4 streams side by side. One stream has the sound and one takes the main monitor. Regie lines up the delays between streams, keeps the chats beside them and moves the sound away from a stream that goes to an ad.
+**A control room for watching several streams at once.** Put Twitch, YouTube, Kick, TikTok, Vimeo, Dailymotion and direct HLS/MP4 streams side by side. One stream has the sound and one takes the main monitor. Regie lines up the delays between streams and keeps the chats beside them.
 
 **[maxgfr.github.io/regie](https://maxgfr.github.io/regie/)**: static, no account, no tracking. An optional [relay](#ad-free-relay-optional) you run yourself removes the ads.
 
@@ -20,14 +20,8 @@ Built for the evening when a tournament runs on five channels at once: the main 
   - Switching can be a **cut** or a 600 ms **crossfade**.
   - Hold `Alt` to listen to the stream under the pointer.
   - A player's own mute button and volume slider work too: Regie follows them. Unmuting another stream inside its player puts it on air.
-- **Ads.**
-  - With the [relay](#ad-free-relay-optional), Twitch, YouTube and Kick play in Regie's own player without ads. When Twitch has no ad-free stream to give, the ad is cut out: the picture holds and the sound moves to another stream. Everything below is about the official embeds.
-  - When the stream on air goes to an ad, the sound moves to another stream (the one with the busiest chat if Regie can tell) and comes back when the ad ends.
-  - An ad is silenced while another stream has the sound. With no other stream to take it, the ad keeps it.
-  - Ads play out on their own: Regie never touches a player during one (no quality change, no pause). A Twitch player that Twitch paused because it couldn't see it (another window in front, full screen elsewhere) is started again once it can be seen.
-  - Optionally (help sheet, off by default because a reload cuts the stream), a Twitch player that goes to a mid-roll ad is reloaded once the ad is confirmed: a fresh player sometimes comes back without it. Never for a pre-roll, at most once per stream every five minutes, and when the fresh player opens on an ad again, the ads of that stream simply play for a quarter of an hour.
-  - Twitch only runs an ad while its player is large and visible, after a click in the player. So a small stream in an ad is shown large, next to the main monitor, until the ad ends, and a notice asks for that one click.
-  - On Twitch, ads are read from the player's own state messages. Elsewhere, Regie watches for a stream whose clock stops while it should be playing. You can also press `A`.
+  - When the Twitch stream on air stops on its own (offline, not started, paused by Twitch), the sound moves to a stream that plays (the one with the busiest chat if Regie can tell) and comes back when it plays again.
+- **No ads, with the relay or the extension.** Through the [relay](#ad-free-relay-optional), Twitch, YouTube and Kick play in Regie's own player without ads; through the [extension](#browser-extension-optional), Twitch does. When Twitch has no ad-free stream to give, the ad is cut out and the picture holds. The official embeds show their ads as the platform runs them.
 - **Line check.** Twitch won't autoplay an embedded player smaller than 400 × 300. A small Twitch monitor is shown large for a moment until it starts, then goes back to its place.
 - **Delays lined up.**
   - Press `S`, then mark the same in-game moment on each stream.
@@ -43,6 +37,7 @@ Built for the evening when a tournament runs on five channels at once: the main 
   - Each small Twitch monitor plays the lowest quality that still fills it (360p instead of 1080p), while the main monitor stays on auto. A five-stream wall uses a fraction of the bandwidth. Every quality change makes Twitch rebuffer, so a monitor keeps its quality through small size changes (grid to main and back, a side panel): it only switches when the picture becomes clearly too soft or more than twice too large.
   - Favourites that go live show a notice with an Add key, can be added on their own, and can raise a system notification when Regie is in the background.
   - Ended streams are labelled offline. Players that don't start get a line check, a retry and a "click to start" label.
+  - A Twitch player that Twitch paused because it couldn't see it (another window in front, full screen elsewhere) is started again once it can be seen.
 - **Find creators.** Search Twitch and Kick channels and see who's live, with their category and viewer count. Star favourites, add every live favourite in one click, and find recent streams again.
 - **The URL is the save file.** The whole setup lives in the address: copy it to share a multiview, or write one by hand:
   - `#shroud+xqc`: Twitch channels, separated by `+`.
@@ -59,7 +54,7 @@ Built for the evening when a tournament runs on five channels at once: the main 
   - A shortcut opens creator search.
   - The interface works offline, though the streams need the network.
   - English and French. The screen stays awake while streams play.
-- **In the background.** Streams played as HLS (through the [relay](#ad-free-relay-optional) or the [extension](#browser-extension-optional)) all keep playing in a background tab or a minimised window, the silent ones too, once you have clicked or pressed a key in Regie. Official embeds are other sites' players: the one you hear keeps playing, but Twitch and YouTube pause a muted embed while the tab is hidden, and Regie starts it again when you come back. Twitch also pauses an ad on an official embed while the tab is hidden (an ad nobody sees doesn't count down): Regie keeps the sound away from it meanwhile. With the extension, embeds keep their ad running in a background tab. On phones, the system pauses other sites' players when the browser leaves the screen, and no web page can prevent that: keep Regie in front, or use the mini control room on a computer.
+- **In the background.** Streams played as HLS (through the [relay](#ad-free-relay-optional) or the [extension](#browser-extension-optional)) all keep playing in a background tab or a minimised window, the silent ones too, once you have clicked or pressed a key in Regie. Official embeds are other sites' players: the one you hear keeps playing, but Twitch and YouTube pause a muted embed while the tab is hidden, and Regie starts it again when you come back. Twitch also pauses an ad on an official embed while the tab is hidden (an ad nobody sees doesn't count down); with the extension, embeds keep their ad running in a background tab. On phones, the system pauses other sites' players when the browser leaves the screen, and no web page can prevent that: keep Regie in front, or use the mini control room on a computer.
 
 ## What a web page can't do
 
@@ -67,7 +62,7 @@ Without the relay or the extension, Regie only uses official embeds, so it can o
 
 | Platform                  | Volume                         | Seek / delay     | Chat                    | Notes                                                                                              |
 | ------------------------- | ------------------------------ | ---------------- | ----------------------- | -------------------------------------------------------------------------------------------------- |
-| Twitch                    | ✓                              | VODs only        | official frame + merged | live latency and ad state from the player                                                          |
+| Twitch                    | ✓                              | VODs only        | official frame + merged | live latency from the player                                                                       |
 | YouTube                   | ✓                              | ✓ (live DVR too) | official frame          | titles through oEmbed                                                                              |
 | Kick                      | mute only (reloads the player) | –                | official frame          | live status through Kick's public API                                                              |
 | TikTok                    | mute only                      | ✓                | –                       | videos only: **TikTok LIVE can't be embedded**, it opens in its own window                         |
@@ -76,7 +71,7 @@ Without the relay or the extension, Regie only uses official embeds, so it can o
 | HLS / MP4 link            | ✓                              | ✓                | –                       | played with hls.js where HLS isn't native                                                          |
 | Through relay / extension | ✓                              | ✓ (lives too)    | unchanged               | Twitch live and VODs, YouTube, Kick (the extension: Twitch only): no ads, latency measured, hls.js |
 
-- **Ads can't be blocked from a page alone.** Players are other sites, and Twitch puts its ads inside the video itself. Every site that embeds Twitch's player shows its ads. With the embeds, Regie moves the sound away from an ad instead. To get rid of them, run the optional [ad-free relay](#ad-free-relay-optional) or install the [Regie extension](#browser-extension-optional).
+- **Ads can't be blocked from a page alone.** Players are other sites, and Twitch puts its ads inside the video itself. Every site that embeds Twitch's player shows its ads. To get rid of them, run the optional [ad-free relay](#ad-free-relay-optional) or install the [Regie extension](#browser-extension-optional).
 - **Extensions, without the relay.** An ad blocker such as [uBlock Origin](https://ublockorigin.com/) works inside Regie's YouTube frames. [TTV LOL PRO](https://github.com/younesaassila/ttv-lol-pro) doesn't act on Regie's embedded Twitch players: it only handles requests from `www.twitch.tv` and `m.twitch.tv` pages. The [Regie extension](#browser-extension-optional) does act on Twitch inside Regie: it runs the same engine as the relay.
 - **Twitch ads wait for a click.** Twitch starts its ads paused. A page can't click inside another site's player, and the player API's `play()` doesn't start an ad either: one click on play in that player does.
 - **Some Twitch channels ask for a click too.** If a channel carries a mature-content warning, Twitch waits for a click on "Start watching" in that player. Twitch also refuses to autoplay a player that is covered, so nothing in Regie is ever drawn over a player.
@@ -127,7 +122,7 @@ Twitch decides ads when it hands out a playback token, from your IP and the play
 1. tries fresh tokens with other player types (`site`, `popout`, `mobile_web`, `embed`), and serves the first ad-free stream during the break;
 2. tries Android's `autoplay` stream (360p) last;
 3. goes back to the main stream as soon as it is clean;
-4. if every stream has ads, cuts the ad segments out: the picture holds and Regie moves the sound to another stream.
+4. if every stream has ads, cuts the ad segments out: the picture holds until the stream comes back.
 
 `TWITCH_PROXY` is the same idea as the [TTV LOL PRO](https://github.com/younesaassila/ttv-lol-pro) extension: a proxy in a country without Twitch ads gets a clean token. YouTube's ads are added by its player, so the streams the relay gets from yt-dlp have none.
 
@@ -207,7 +202,7 @@ Stack:
 
 ```
 src/
-  core/        pure logic, unit-tested: layout engine, audio mix, sync, ad detection, hype meter, URL session
+  core/        pure logic, unit-tested: layout engine, audio mix, sync, embed heuristics, hype meter, URL session
   platforms/   link parsing, embed and chat URLs, oEmbed titles, creator search
   players/     one controller per official player API (Twitch Embed JS, YouTube IFrame API, TikTok, <video>)
   chat/        anonymous read-only Twitch chat

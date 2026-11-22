@@ -5,12 +5,8 @@ export type PlaybackState = 'loading' | 'playing' | 'paused' | 'buffering' | 'en
 
 export interface PlayerEvents {
   state(state: PlaybackState, byPlayer: boolean): void
-  /** Playback position in seconds, when the player reports one. */
-  progress(time: number): void
   /** Live latency to the broadcaster in seconds (Twitch). */
   latency(seconds: number): void
-  /** A platform message that suggests an ad started or ended. */
-  adHint(on: boolean): void
   /** The viewer changed the sound inside the player itself (its mute button or volume slider). */
   userVolume(volume: number, muted: boolean): void
   /** The qualities a player can be switched to (`setQuality`), and the one it plays: on load and on each switch. */

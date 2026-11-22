@@ -5,27 +5,27 @@
 The gallery of a TV control room, specifically its **multiviewer wall** and **vision mixer**. People who watch esports know this look from broadcast backstage shots. Regie borrows the grammar, not a costume:
 
 - **Monitors (tiles).** Video sits edge to edge on black. Under each picture there is an **UMD** (under-monitor display): a strip with the source number, the name, the platform and a timecode or delay in mono.
-- **Tally.** A **red PGM** border plus an `ON AIR` label marks the stream that has the sound. A **green PVW** border marks the main monitor when it is not the one on air. Amber marks an `AD` or an off-air tile. Tally is always a label as well as a colour.
+- **Tally.** A **red PGM** border plus an `ON AIR` label marks the stream that has the sound. A **green PVW** border marks the main monitor when it is not the one on air. Amber marks a stream covering for one that stopped, and a monitor that waits for a click. Tally is always a label as well as a colour.
 - **Audio bars.** A thin vertical meter on the right edge of each monitor. It shows the chat activity ("hype"), which is the only level Regie can read from a cross-origin player.
 - **Vision mixer (console).** At the bottom: two rows of illuminated, numbered keys, **PGM / SON** (who is heard) and **MAIN** (who takes the large monitor), then a **CUT / MIX** transition toggle, faders and layout keys. The keys light like real ones: unlit dark plastic, lit with an inner glow of their colour.
 - **Test card.** The empty state is a test card (vertical colour bars, a centred identity box with a crosshair circle) with the source input in the middle.
 
 ## Palette
 
-| Token      | Value     | Use                                     |
-| ---------- | --------- | --------------------------------------- |
-| `--ground` | `#0b0c0d` | wall behind the monitors                |
-| `--panel`  | `#141618` | console, chat column                    |
-| `--key`    | `#1d2023` | unlit keys, inputs                      |
-| `--line`   | `#2a2e32` | separators, bezel edges                 |
-| `--text`   | `#e6e8e3` | labels                                  |
-| `--dim`    | `#9097a0` | secondary text (≥ 4.5:1 on panel)       |
-| `--pgm`    | `#ff3b30` | on air, red tally                       |
-| `--pvw`    | `#2fd36b` | main monitor, green tally               |
-| `--amber`  | `#ffb020` | ads, warnings, delay badges, focus ring |
-| `--signal` | `#5ac8fa` | merged-chat channel accent fallback     |
+| Token      | Value     | Use                                    |
+| ---------- | --------- | -------------------------------------- |
+| `--ground` | `#0b0c0d` | wall behind the monitors               |
+| `--panel`  | `#141618` | console, chat column                   |
+| `--key`    | `#1d2023` | unlit keys, inputs                     |
+| `--line`   | `#2a2e32` | separators, bezel edges                |
+| `--text`   | `#e6e8e3` | labels                                 |
+| `--dim`    | `#9097a0` | secondary text (≥ 4.5:1 on panel)      |
+| `--pgm`    | `#ff3b30` | on air, red tally                      |
+| `--pvw`    | `#2fd36b` | main monitor, green tally              |
+| `--amber`  | `#ffb020` | warnings, covering, delays, focus ring |
+| `--signal` | `#5ac8fa` | merged-chat channel accent fallback    |
 
-Dark comes from the use scene: video watched for hours, often at night. The chrome stays quiet so the pictures lead; colour is reserved for state (tally, ads).
+Dark comes from the use scene: video watched for hours, often at night. The chrome stays quiet so the pictures lead; colour is reserved for state (tally, warnings).
 
 ## Type
 

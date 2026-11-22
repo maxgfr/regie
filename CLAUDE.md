@@ -19,7 +19,7 @@ Static multi-stream viewer deployed on GitHub Pages. Read `PRODUCT.md` (product 
 - **Never draw anything over a player.** Twitch refuses to autoplay, or pauses, a covered player. That rules out overlays, sheets and toasts above the wall.
   - The tally is a ring outside the monitor. States go in the label strip (UMD).
   - Side panels dock in the right column. Notices sit between the wall and the console.
-- **Twitch needs 400×300 and visibility** to autoplay and to run ads. `computeLayout({ boostId })` shows one small tile large next to the main tile, for a line check (`store.warmUp`) or for an ad. Never move the main tile away from an ad: a hidden ad never ends.
+- **Twitch needs 400×300 and visibility** to autoplay. `computeLayout({ boostId })` shows one small tile large next to the main tile for a line check (`store.warmUp`).
   - A small Twitch player is rendered at 400×300 and scaled down with **`zoom`, never `transform: scale()`**: the player watches itself with an IntersectionObserver (`trackVisibility`), which reports a scaled-down transform as hidden, and Twitch pauses it for good.
 - **Mount a player only once its tile has a real size** (`TileView` waits for a rect). A player started hidden or at 0×0 doesn't autoplay.
 - **Third-party calls must never break the room.** Wrap player calls with `safely()`, and have directory and title fetches return `null`/`[]` on failure.
@@ -31,7 +31,7 @@ Static multi-stream viewer deployed on GitHub Pages. Read `PRODUCT.md` (product 
 The page must work exactly as before without it. A relayed tile plays the relay's HLS in `players/video.ts` (hls.js); every other tile keeps its embed.
 
 - **The relay never breaks the room.** `/health` has a 3 s timeout and returns `null` on failure. A relayed player that fails before its first picture calls `onFail`, and the store mounts the embed **in the same container** (`#remount`, never a new node). If the relay stops answering, the embeds take over.
-- **Relayed tiles skip the Twitch embed constraints.** Gate embed-only behaviour on `store.embedTwitch(id)`, not on `platform === 'twitch'`: 400×300 scaling, line check, boost, ad reload, quality fit, ad-blocker and "click to start" heuristics. Chat, IRC, directory and titles stay on `platform`.
+- **Relayed tiles skip the Twitch embed constraints.** Gate embed-only behaviour on `store.embedTwitch(id)`, not on `platform === 'twitch'`: 400×300 scaling, line check, boost, quality fit, ad-blocker and "click to start" heuristics. Chat, IRC, directory and titles stay on `platform`.
 - **Capabilities depend on the player:** use `store.caps(tile)`, not `capabilities(tile.source)`.
 - **A silent `<video>` is never `muted` once the page may play sound** (`players/video.ts`): it plays at `SILENT_VOLUME` (-80 dB). Chrome pauses a muted or volume-0 video when its tab goes to the background, and it comes back far behind live. Before the first user gesture it has to be `muted` to autoplay.
 - **Relay settings live in localStorage** (`library.relaySettings()`), never in the hash: they belong to the machine, and a shared link must play on both sides.

@@ -31,12 +31,9 @@ export interface Preferences {
   liveChat: boolean
   antiSpoiler: boolean
   autoDirector: boolean
-  adSwitch: boolean
   chatOpen: boolean
   keywords: string[]
   autoAdd: boolean
-  /** The session's `adReload`. */
-  reloadAds: boolean
   /** Address of the viewer's relay. Specific to this machine: kept here, never in a shared link. */
   relayUrl: string
   /** The relay's optional key. */
@@ -157,19 +154,7 @@ export function saveRelay(url: string, key: string) {
 }
 
 export function savePreferences(session: Session) {
-  const {
-    audioMode,
-    transition,
-    duck,
-    liveChat,
-    antiSpoiler,
-    autoDirector,
-    adSwitch,
-    chatOpen,
-    keywords,
-    autoAdd,
-    adReload,
-  } = session
+  const { audioMode, transition, duck, liveChat, antiSpoiler, autoDirector, chatOpen, keywords, autoAdd } = session
   write(KEYS.preferences, {
     audioMode,
     transition,
@@ -177,11 +162,9 @@ export function savePreferences(session: Session) {
     liveChat,
     antiSpoiler,
     autoDirector,
-    adSwitch,
     chatOpen,
     keywords,
     autoAdd,
-    reloadAds: adReload,
     // Not part of the session: kept as they are.
     ...relayPreferences(),
   })

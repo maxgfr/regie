@@ -93,7 +93,6 @@ export function createYouTubePlayer(context: PlayerContext): Player {
       timer = setInterval(() => {
         if (!ready || !player) return
         try {
-          if (player.getPlayerState() === 1) events.progress(player.getCurrentTime())
           // The viewer used the player's own mute button or slider: that becomes Regie's setting.
           if (playing && Date.now() - settledAt > 3000) {
             const muted = player.isMuted()

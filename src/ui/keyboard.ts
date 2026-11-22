@@ -67,9 +67,6 @@ export function installKeyboard(store: Store, input: () => HTMLInputElement | nu
         case 't':
           store.setTransition(store.session.transition === 'cut' ? 'mix' : 'cut')
           break
-        case 'a':
-          if (selected) store.toggleAd(selected)
-          break
         case 'm':
           if (selected) store.toggleMute(selected)
           break

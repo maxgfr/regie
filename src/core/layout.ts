@@ -15,8 +15,8 @@ export interface LayoutInput {
   /** Fixed height under each picture (the label strip), so the picture itself keeps its aspect. */
   chrome?: number
   /**
-   * A tile that must be shown large for a while (a Twitch player starting, or playing an ad that only
-   * counts down when the player is large and visible). It shares the main area with the focus tile.
+   * A tile that must be shown large for a while: a Twitch player starting, which only autoplays when it is
+   * large and visible (the line check). It shares the main area with the focus tile.
    */
   boostId?: string | null
 }

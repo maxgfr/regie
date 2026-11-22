@@ -26,7 +26,7 @@ const newStats = (): LoaderStats => ({
 })
 
 /**
- * The reply as a `Response`, so hls.js and Regie's ad header reader see its headers as from the network.
+ * The reply as a `Response`, so hls.js sees its headers as from the network.
  * Null when it can't be one (status 0, a header the Fetch API refuses).
  */
 function details(reply: RelayReply): NullableNetworkDetails {

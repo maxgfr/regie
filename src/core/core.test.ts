@@ -1,38 +1,20 @@
 import { describe, expect, test } from 'bun:test'
-import {
-  AD_CONFIRM_MS,
-  adblockSuspect,
-  adReducer,
-  adTick,
-  BLOCKED_AFTER_MS,
-  initialAdState,
-  noteAd,
-  PREROLL_MS,
-  RELOAD_FAILED_MS,
-  RELOAD_GAP_MS,
-  STALL_MS,
-  shouldReload,
-  shouldWake,
-} from './ads.ts'
 import { mixAudio, standIn } from './audio.ts'
+import { adblockSuspect, BLOCKED_AFTER_MS, shouldWake } from './embed.ts'
 import { decayHype, initialHype, recordMessage, spike } from './hype.ts'
 import { decodeSession, defaultSession, encodeSession, newTile } from './session.ts'
 import { chatHold, planSync } from './sync.ts'
 
-const tile = (
-  id: string,
-  extra: Partial<{ volume: number; muted: boolean; inAd: boolean; hype: number; idle: boolean }> = {},
-) => ({
+const tile = (id: string, extra: Partial<{ volume: number; muted: boolean; hype: number; idle: boolean }> = {}) => ({
   id,
   volume: 1,
   muted: false,
-  inAd: false,
   hype: 0,
   ...extra,
 })
 
 describe('mixAudio', () => {
-  const base = { mode: 'solo' as const, listenId: null, duck: 0.2, master: 1, adSwitch: true }
+  const base = { mode: 'solo' as const, listenId: null, duck: 0.2, master: 1 }
 
   test('solo: only the tile on air is audible', () => {
     const out = mixAudio({ ...base, tiles: [tile('a'), tile('b')], audioId: 'b' })
@@ -49,20 +31,8 @@ describe('mixAudio', () => {
     expect(out.onAir).toBe('b')
   })
 
-  test('an ad on the tile on air hands the sound to another one', () => {
-    const out = mixAudio({ ...base, tiles: [tile('a', { inAd: true }), tile('b'), tile('c')], audioId: 'a' })
-    expect(out).toEqual({ onAir: 'b', covering: true, volumes: { a: 0, b: 1, c: 0 } })
-  })
-
   test('the stand-in is the hottest chat when there is one', () => {
-    expect(standIn([tile('a', { inAd: true }), tile('b'), tile('c', { hype: 3 })], 'a')).toBe('c')
-  })
-
-  test('no switch when the option is off, or when everyone is in an ad', () => {
-    const tiles = [tile('a', { inAd: true }), tile('b')]
-    expect(mixAudio({ ...base, adSwitch: false, tiles, audioId: 'a' }).onAir).toBe('a')
-    const all = [tile('a', { inAd: true }), tile('b', { inAd: true })]
-    expect(mixAudio({ ...base, tiles: all, audioId: 'a' }).onAir).toBe('a')
+    expect(standIn([tile('a', { idle: true }), tile('b'), tile('c', { hype: 3 })], 'a')).toBe('c')
   })
 
   test('a tile on air that the platform stopped hands the sound to one that plays', () => {
@@ -75,23 +45,9 @@ describe('mixAudio', () => {
     // Nothing plays: the choice stays.
     const stopped = [tile('a', { idle: true }), tile('b', { idle: true })]
     expect(mixAudio({ ...base, tiles: stopped, audioId: 'a' }).onAir).toBe('a')
-    // An ad's stand-in is never a stopped tile.
-    expect(standIn([tile('a', { inAd: true }), tile('b', { idle: true }), tile('c')], 'a')).toBe('c')
-  })
-
-  test('an ad is never forced silent: with nowhere to send the sound, it keeps it', () => {
-    const all = [tile('a', { inAd: true }), tile('b', { inAd: true })]
-    expect(mixAudio({ ...base, tiles: all, audioId: 'a' })).toEqual({
-      onAir: 'a',
-      covering: false,
-      volumes: { a: 1, b: 0 },
-    })
-    expect(
-      mixAudio({ ...base, adSwitch: false, tiles: [tile('a', { inAd: true }), tile('b')], audioId: 'a' }).volumes,
-    ).toEqual({
-      a: 1,
-      b: 0,
-    })
+    // The stand-in is never another stopped tile, nor a muted one.
+    expect(standIn([tile('a', { idle: true }), tile('b', { idle: true }), tile('c')], 'a')).toBe('c')
+    expect(standIn([tile('a', { idle: true }), tile('b', { muted: true }), tile('c')], 'a')).toBe('c')
   })
 
   test('manual: each fader counts, muted tiles stay silent', () => {
@@ -135,67 +91,7 @@ describe('planSync', () => {
   })
 })
 
-describe('ads', () => {
-  test('a frozen clock while playing reads as an ad, moving again ends it', () => {
-    let state = initialAdState(0)
-    state = adReducer(state, { type: 'progress', time: 10 }, 0)
-    state = adTick(state, STALL_MS + 1, true)
-    expect(state.inAd).toBe(true)
-    state = adReducer(state, { type: 'progress', time: 10 }, STALL_MS + 500)
-    expect(state.inAd).toBe(true)
-    state = adReducer(state, { type: 'progress', time: 12 }, STALL_MS + 1000)
-    expect(state.inAd).toBe(false)
-  })
-
-  test('a pause is never an ad, and it ends a guessed one', () => {
-    expect(adReducer(initialAdState(0), { type: 'paused' }, 1).inAd).toBe(false)
-    let state = adReducer(initialAdState(0), { type: 'progress', time: 10 }, 0)
-    state = adTick(state, STALL_MS + 1, true)
-    expect(state.inAd).toBe(true)
-    expect(adReducer(state, { type: 'paused' }, STALL_MS + 2).inAd).toBe(false)
-  })
-
-  test('a pause does not end an ad the player reported', () => {
-    let state = adReducer(initialAdState(0), { type: 'hint', on: true }, 0)
-    state = adReducer(state, { type: 'paused' }, 10)
-    expect(state.inAd).toBe(true)
-    expect(adReducer(state, { type: 'hint', on: false }, 20).inAd).toBe(false)
-  })
-
-  test('only a mid-roll is reloaded, at most once in five minutes', () => {
-    const late = PREROLL_MS + AD_CONFIRM_MS
-    // A pre-roll: the player never showed the stream, or only for a few seconds.
-    expect(shouldReload({}, undefined, late)).toBe(false)
-    expect(shouldReload({}, 0, 5000)).toBe(false)
-    expect(shouldReload({}, 0, late)).toBe(true)
-    expect(shouldReload({ at: late }, 0, late + 1000)).toBe(false)
-    expect(shouldReload({ at: late }, 0, late + RELOAD_GAP_MS)).toBe(true)
-  })
-
-  test('a reload that opens on another ad stops the reloads for a while', () => {
-    // The fresh player went straight to an ad, before showing the stream.
-    const failed = noteAd({ at: 1000 }, false, 5000)
-    expect(failed.failedAt).toBe(5000)
-    expect(shouldReload(failed, 0, 1000 + RELOAD_GAP_MS)).toBe(false)
-    expect(shouldReload(failed, 0, 5000 + RELOAD_FAILED_MS)).toBe(true)
-    // The stream came back first: the reload worked, nothing to remember.
-    expect(noteAd({ at: 1000 }, true, 60_000).failedAt).toBeUndefined()
-    expect(noteAd({}, false, 5000).failedAt).toBeUndefined()
-  })
-
-  test('an ad the player reported holds past the timeout, until the player ends it', () => {
-    const state = adReducer(initialAdState(0), { type: 'hint', on: true }, 0)
-    expect(adTick(state, 200_000, true).inAd).toBe(true)
-    expect(adReducer(state, { type: 'hint', on: false }, 200_000).inAd).toBe(false)
-  })
-
-  test('a manual mark holds until removed or timed out', () => {
-    let state = adReducer(initialAdState(0), { type: 'manual', on: true }, 0)
-    state = adReducer(state, { type: 'progress', time: 5 }, 100)
-    expect(state.inAd).toBe(true)
-    expect(adTick(state, 200_000, true).inAd).toBe(false)
-  })
-
+describe('embeds', () => {
   test('a player that was asked to play and still never started is suspected of being ad-blocked', () => {
     expect(adblockSuspect({ since: 0, retried: true }, BLOCKED_AFTER_MS + 1)).toBe(true)
     // Not yet: no play() retry sent, or still playing, or offline, or too soon.
@@ -207,17 +103,15 @@ describe('ads', () => {
   })
 
   test('back on the page, a player Twitch stopped in the background is woken', () => {
-    // An ad Twitch paused while nobody saw it, or a stream it stopped.
-    expect(shouldWake({ played: true, state: 'playing', inAd: true })).toBe(true)
-    expect(shouldWake({ played: true, state: 'paused', inAd: false })).toBe(true)
-    expect(shouldWake({ played: true, state: 'buffering', inAd: false })).toBe(true)
+    expect(shouldWake({ played: true, state: 'paused' })).toBe(true)
+    expect(shouldWake({ played: true, state: 'buffering' })).toBe(true)
     // Playing its stream: nothing to do.
-    expect(shouldWake({ played: true, state: 'playing', inAd: false })).toBe(false)
+    expect(shouldWake({ played: true, state: 'playing' })).toBe(false)
     // Never started (autoplay refused, waiting its turn), paused by the viewer, or nothing to play.
-    expect(shouldWake({ played: false, state: 'paused', inAd: true })).toBe(false)
-    expect(shouldWake({ played: true, state: 'paused', inAd: false, pausedByViewer: true })).toBe(false)
-    expect(shouldWake({ played: true, state: 'offline', inAd: false })).toBe(false)
-    expect(shouldWake({ played: true, state: 'ended', inAd: true })).toBe(false)
+    expect(shouldWake({ played: false, state: 'paused' })).toBe(false)
+    expect(shouldWake({ played: true, state: 'paused', pausedByViewer: true })).toBe(false)
+    expect(shouldWake({ played: true, state: 'offline' })).toBe(false)
+    expect(shouldWake({ played: true, state: 'ended' })).toBe(false)
   })
 })
 
@@ -255,7 +149,7 @@ describe('session', () => {
       duck: 0.35,
       liveChat: true,
       keywords: ['ace', 'clutch'],
-      adSwitch: false,
+      autoDirector: true,
     })
     const decoded = decodeSession(`#${encodeSession(session)}`)
     expect(decoded.tiles.map((t) => t.source)).toEqual([a.source, b.source, c.source])
@@ -263,7 +157,7 @@ describe('session', () => {
     expect(decoded.tiles[2]?.muted).toBe(true)
     expect(decoded.focusId).toBe(decoded.tiles[1]?.id ?? '')
     expect(decoded.audioId).toBe(decoded.tiles[2]?.id ?? '')
-    expect(decoded).toMatchObject({ layout: 'focus', audioMode: 'mix', duck: 0.35, liveChat: true, adSwitch: false })
+    expect(decoded).toMatchObject({ layout: 'focus', audioMode: 'mix', duck: 0.35, liveChat: true, autoDirector: true })
     expect(decoded.keywords).toEqual(['ace', 'clutch'])
   })
 
@@ -315,6 +209,17 @@ describe('session', () => {
 
   test('the default session encodes to nothing', () => {
     expect(encodeSession(defaultSession())).toBe('')
+  })
+
+  test('links from before the ad settings were retired still open, the flags ignored', () => {
+    // `as` (leave ads) and `ar` (reload for ads) were session flags; `ad` is the auto-director.
+    const old = decodeSession('#s=tw.a+tw.b&l=focus&as=0&ar=1&ad=1&a=1')
+    expect(old.tiles.map((t) => t.source.id)).toEqual(['a', 'b'])
+    expect(old).toMatchObject({ layout: 'focus', autoDirector: true })
+    expect(old.audioId).toBe(old.tiles[1]?.id ?? '')
+    expect(Object.keys(old).sort()).toEqual(Object.keys(defaultSession()).sort())
+    expect(encodeSession(old)).toBe(encodeSession(decodeSession('#s=tw.a+tw.b&l=focus&ad=1&a=1')))
+    expect(encodeSession(old)).not.toMatch(/(^|&)(as|ar)=/)
   })
 
   test('garbage is ignored', () => {

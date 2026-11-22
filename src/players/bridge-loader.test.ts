@@ -24,12 +24,12 @@ function run(url: string, reply: RelayReply | Promise<RelayReply>, calls: [strin
 }
 
 describe('extension playlist loader', () => {
-  test('a playlist comes through the bridge, with its ad header readable', async () => {
+  test('a playlist comes through the bridge, with its headers readable', async () => {
     const calls: [string, number][] = []
     const body = '#EXTM3U\n#EXTINF:2.000,live\nhttps://video-edge.example/1.ts\n'
     const result = await run(
       `${EXTENSION_BASE}/v/s1/v1.m3u8`,
-      { status: 200, headers: { 'x-regie-ad': '1', 'content-type': 'application/vnd.apple.mpegurl' }, body },
+      { status: 200, headers: { 'content-type': 'application/vnd.apple.mpegurl' }, body },
       calls,
     )
     expect(calls).toEqual([['/v/s1/v1.m3u8', 1234]])
@@ -42,9 +42,9 @@ describe('extension playlist loader', () => {
     ]
     expect(response).toEqual({ url: `${EXTENSION_BASE}/v/s1/v1.m3u8`, data: body, code: 200 })
     expect(stats.loaded).toBe(body.length)
-    // The player's header reader asks a `Response`'s headers, case aside.
-    expect(network.headers.get('X-Regie-Ad')).toBe('1')
-    expect(result.loader.getResponseHeader?.('X-REGIE-AD')).toBe('1')
+    // hls.js reads the headers of a `Response`, case aside.
+    expect(network.headers.get('Content-Type')).toBe('application/vnd.apple.mpegurl')
+    expect(result.loader.getResponseHeader?.('CONTENT-TYPE')).toBe('application/vnd.apple.mpegurl')
   })
 
   test('an extension that does not answer, or an error status, is a load error', async () => {

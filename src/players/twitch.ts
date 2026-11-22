@@ -7,7 +7,6 @@ import {
   type Quality,
   recordStall,
 } from '../core/quality.ts'
-import { initialTwitchAdState, type TwitchUpdate, twitchAdStep, twitchAdVisibility } from '../core/twitch-ads.ts'
 import { loadScript } from './load-script.ts'
 import type { Player, PlayerContext } from './types.ts'
 
@@ -48,39 +47,39 @@ declare global {
 
 const SCRIPT = 'https://player.twitch.tv/js/embed/v1.js'
 
-/** Twitch only autoplays, and only counts its ads down, in a player of at least this size. */
+/** Twitch only autoplays a player of at least this size. */
 export const TWITCH_MIN_WIDTH = 400
 export const TWITCH_MIN_HEIGHT = 300
 
-// How ads show in the player's state messages: see `core/twitch-ads.ts`.
-export {
-  AD_BREAK_MAX_MS,
-  AD_FROZEN_MS,
-  AD_GONE_MS,
-  AD_LATENCY_FROZEN_MS,
-  AD_MIN_BUFFER_S,
-  AD_RUNNING_MS,
-  AD_STUCK_MS,
-  adSignature,
-} from '../core/twitch-ads.ts'
+/** What the player iframe reports about itself, about twice a second (observed, undocumented). */
+export interface TwitchUpdate {
+  playback: string
+  /** The stream's own clock, in seconds. */
+  time?: number
+  /** Seconds of video buffered ahead. */
+  buffer?: number
+  latency?: number
+  muted?: boolean
+  volume?: number
+}
 
 /** Below this much buffer, a rebuffer is a real stall: the connection didn't keep up. */
 const STALL_BUFFER_S = 0.5
 /** Leave the quality change a moment to settle before reading a rebuffer as a stall. */
 const SWITCH_SETTLE_MS = 6000
-/** Wait for the layout to settle before matching the quality to it (a line check or an ad boost is brief). */
+/** Wait for the layout to settle before matching the quality to it (a line check is brief). */
 const FIT_DELAY_MS = 1500
 /** A monitor made smaller waits longer: the viewer often switches layouts back and forth. */
 const FIT_SMALL_DELAY_MS = 6000
 /**
- * A quality switch looks like an ad for a moment: Twitch reports "Buffering" with hundreds of seconds of
- * buffer, then plays with its clock at 0. No ad is read until the stream itself plays again, or this long.
+ * A quality switch takes a moment: Twitch reports "Buffering" with hundreds of seconds of buffer, then plays
+ * with its clock at 0. The switch is over once the stream itself plays again, or after this long.
  */
 const SWITCH_GRACE_MS = 15_000
 /**
- * The quality is only changed once the stream itself has played this long. A `setQuality` while an ad starts
- * freezes the ad (and the stream behind it) until someone clicks the player: observed with Twitch's
- * "preparing your stream" pre-roll, which starts a few seconds after the player.
+ * The quality is only changed once the stream itself has played this long. A `setQuality` in the player's
+ * first seconds freezes it until someone clicks it: observed with Twitch's "preparing your stream" pre-roll,
+ * which starts a few seconds after the player.
  */
 const CONTENT_SETTLE_MS = 5000
 
@@ -97,21 +96,17 @@ export function createTwitchPlayer(context: PlayerContext): Player {
   container.append(element)
   let frame: HTMLIFrameElement | null = null
 
-  // The player iframe reports its full state to the page about twice a second: the only ad signal an embed
-  // gets (see `core/twitch-ads.ts`).
-  let ads = initialTwitchAdState(Date.now())
-  let inAd = false
+  // The player iframe reports its full state to the page about twice a second (`readUpdate`).
   let lastPlayback = ''
   const live = source.kind !== 'vod'
-  // Since when the stream itself (not an ad) has been playing without a break.
+  // Since when the stream itself has been playing without a break.
   let contentSince: number | null = null
   // Autoplay with sound can be refused (PLAYBACK_BLOCKED): the player starts muted, and the sound only comes
-  // on once it really plays. An ad isn't muted here: Regie's mix decides, and only silences an ad when another
-  // stream takes the sound.
+  // on once it really plays.
   let playing = false
   const expectMuted = () => wanted <= 0 || !playing
   // When Regie last changed the sound, or the player changed state: differences right after are the player's
-  // own doing (it restores its state around ads and starts), not the viewer's.
+  // own doing (it restores its saved state as it starts), not the viewer's.
   let settledAt = 0
   const apply = () => {
     if (!player || !ready) return
@@ -135,7 +130,7 @@ export function createTwitchPlayer(context: PlayerContext): Player {
   const applyQuality = (force = false) => {
     qualityDirty = true
     if (force) forceQuality = true
-    if (!player || !ready || inAd || !fitting) return
+    if (!player || !ready || !fitting) return
     if (contentSince === null || Date.now() - contentSince < CONTENT_SETTLE_MS) return
     try {
       const available = player
@@ -171,7 +166,7 @@ export function createTwitchPlayer(context: PlayerContext): Player {
     const now = Date.now()
     if (update.latency && update.latency > 0) events.latency(update.latency)
     // A rebuffer with an empty buffer at a quality Regie forced: the connection may not keep up with it.
-    if (update.playback === 'Buffering' && lastPlayback === 'Playing' && quality !== 'auto' && !inAd) {
+    if (update.playback === 'Buffering' && lastPlayback === 'Playing' && quality !== 'auto') {
       if (now - switchedAt > SWITCH_SETTLE_MS && (update.buffer ?? 0) < STALL_BUFFER_S) {
         const before = stalls.penalty
         stalls = recordStall(stalls, now)
@@ -180,14 +175,10 @@ export function createTwitchPlayer(context: PlayerContext): Player {
     }
     lastPlayback = update.playback
     const switchExpired = switching && now - switchedAt > SWITCH_GRACE_MS
-    const step = twitchAdStep(ads, update, {
-      now,
-      hidden: document.hidden,
-      live,
-      switching: switching && !switchExpired,
-    })
-    ads = step.state
-    const { content } = step
+    // What plays is the stream itself: a live one reports how far behind the broadcaster it is (Twitch's own
+    // pre-roll has no broadcaster). Nothing counts while the page is hidden: Twitch pauses what nobody sees.
+    const content =
+      !document.hidden && update.playback === 'Playing' && (!live || update.latency === undefined || update.latency > 0)
     contentSince = content ? (contentSince ?? now) : null
     if (switching && content && update.time) switching = false
     else if (switchExpired) {
@@ -200,13 +191,6 @@ export function createTwitchPlayer(context: PlayerContext): Player {
           // Nothing more to do: the viewer can still click the player.
         }
       }
-    }
-    const ad = step.inAd
-    if (ad !== inAd) {
-      inAd = ad
-      if (!ad) playing = true
-      events.adHint(ad)
-      apply()
     }
     // A size change waited for the stream itself to play steadily.
     if (qualityDirty && contentSince !== null && now - contentSince >= CONTENT_SETTLE_MS) applyQuality()
@@ -229,12 +213,6 @@ export function createTwitchPlayer(context: PlayerContext): Player {
     }
   }
   window.addEventListener('message', onMessage)
-  // Twitch may post nothing while the page is hidden: the switch is marked anyway, so the clocks measured in
-  // the background are never read as an ad, nor as its end.
-  const onVisibility = () => {
-    ads = twitchAdVisibility(ads, document.hidden, Date.now())
-  }
-  document.addEventListener('visibilitychange', onVisibility)
 
   loadScript(SCRIPT)
     .then(() => {
@@ -271,7 +249,7 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       })
       instance.addEventListener(Twitch.Player.PLAY, () => events.state('buffering', true))
       // Twitch also sends PAUSE when it rebuffers, and when Regie switches its quality (that one isn't the
-      // viewer's). Ads come from the state messages; a pause is never an ad.
+      // viewer's).
       instance.addEventListener(Twitch.Player.PAUSE, () =>
         switching ? events.state('buffering', true) : events.state('paused', false),
       )
@@ -286,7 +264,6 @@ export function createTwitchPlayer(context: PlayerContext): Player {
           applyQuality(true)
         }
         try {
-          if (source.kind === 'vod') events.progress(player.getCurrentTime())
           const latency = player.getPlaybackStats()?.hlsLatencyBroadcaster
           if (typeof latency === 'number' && latency > 0) events.latency(latency)
         } catch {
@@ -322,7 +299,6 @@ export function createTwitchPlayer(context: PlayerContext): Player {
       clearInterval(timer)
       clearTimeout(fitTimer)
       window.removeEventListener('message', onMessage)
-      document.removeEventListener('visibilitychange', onVisibility)
       element.remove()
     },
   }
@@ -335,12 +311,10 @@ export function readUpdate(data: unknown): TwitchUpdate | null {
   if (message.eventName !== 'UPDATE_STATE' || !message.params) return null
   const { playback, stats, muted, volume, currentTime } = message.params
   if (typeof playback !== 'string') return null
-  const video = (
-    stats as { videoStats?: { fps?: unknown; bufferSize?: unknown; hlsLatencyBroadcaster?: unknown } } | undefined
-  )?.videoStats
+  const video = (stats as { videoStats?: { bufferSize?: unknown; hlsLatencyBroadcaster?: unknown } } | undefined)
+    ?.videoStats
   return {
     playback,
-    fps: typeof video?.fps === 'number' ? video.fps : 0,
     time: typeof currentTime === 'number' ? currentTime : undefined,
     buffer: typeof video?.bufferSize === 'number' ? video.bufferSize : undefined,
     latency: typeof video?.hlsLatencyBroadcaster === 'number' ? video.hlsLatencyBroadcaster : undefined,

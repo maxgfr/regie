@@ -1,4 +1,4 @@
-import { Megaphone, Power, ShieldBan, Timer, Volume2 } from 'lucide'
+import { Power, ShieldBan, Timer, Volume2 } from 'lucide'
 import type { Handle } from 'remix/component'
 import { css, on, ref } from 'remix/component'
 import type { Store } from '../app/store.ts'
@@ -81,7 +81,7 @@ const warmupStyle = css({
   textTransform: 'uppercase',
 })
 
-const adNoticeStyle = css({
+const blockedStyle = css({
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -273,16 +273,10 @@ export function App(handle: Handle<{ store: Store }>) {
               })}
             </div>
           )}
-          {!ui.warmup && store.twitchAds()[0] && (
-            <div role="status" mix={adNoticeStyle}>
-              <Icon icon={Megaphone} size={16} />
-              {t('ad.notice', { name: store.label(store.twitchAds()[0] as string) })}
-            </div>
-          )}
           {store.adblockedTiles()[0] && (
-            <div role="status" mix={adNoticeStyle}>
+            <div role="status" mix={blockedStyle}>
               <Icon icon={ShieldBan} size={16} />
-              {t('ad.blockedNotice', { name: store.label(store.adblockedTiles()[0] as string) })}
+              {t('adblock.notice', { name: store.label(store.adblockedTiles()[0] as string) })}
             </div>
           )}
           {ui.liveAlerts.map((creator) => (

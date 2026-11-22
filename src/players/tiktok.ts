@@ -36,7 +36,6 @@ export function createTikTokPlayer(context: PlayerContext): Player {
       if (state) events.state(state, true)
     } else if (data.type === 'onCurrentTime') {
       time = (data.value as { currentTime?: number })?.currentTime ?? time
-      events.progress(time)
     } else if (data.type === 'onPlayerError') events.state('offline', true)
   }
   window.addEventListener('message', onMessage)

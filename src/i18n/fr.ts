@@ -28,8 +28,6 @@ export const fr: Record<MessageKey, string> = {
   'console.pauseAll': 'Tout mettre en pause',
   'console.back': 'Tout le monde recule de 10 s',
   'console.forward': 'Tout le monde avance de 10 s',
-  'console.adSwitch': 'Quitter les pubs',
-  'console.adSwitchHint': 'Quand le stream à l’antenne passe en pub, le son passe sur un autre',
   'console.tools': 'Outils',
   'console.empty': 'Ajoutez un stream pour allumer les touches',
   'layout.grid': 'Grille',
@@ -42,11 +40,8 @@ export const fr: Record<MessageKey, string> = {
   'tile.fullscreen': 'Plein écran',
   'tile.open': 'Ouvrir sur {platform}',
   'tile.remove': 'Retirer',
-  'tile.ad': 'Marquer comme pub (A)',
-  'tile.adOff': 'Fin de la pub (A)',
   'tile.badgeAir': 'Antenne',
   'tile.badgeMain': 'Principal',
-  'tile.badgeAd': 'Pub',
   'tile.badgeCover': 'Relais',
   'tile.badgeHype': 'Hype',
   'tile.badgeStart': 'Cliquez pour lancer',
@@ -114,7 +109,6 @@ export const fr: Record<MessageKey, string> = {
   'help.k.layout': 'Disposition suivante',
   'help.k.chat': 'Afficher ou masquer le chat',
   'help.k.sync': 'Aligner les streams',
-  'help.k.ad': 'Marquer ou démarquer une pub sur le stream sélectionné',
   'help.k.mute': 'Couper le son du stream sélectionné',
   'help.k.full': 'Stream sélectionné en plein écran',
   'help.k.cut': 'Transition du son en cut ou en fondu',
@@ -124,7 +118,7 @@ export const fr: Record<MessageKey, string> = {
   'help.focusNote': 'Après un clic dans un player, Regie reprend le clavier pour que ces touches marchent toujours.',
   'help.ads': 'Pubs',
   'help.adsText':
-    'Une page web ne peut pas bloquer les pubs dans les players d’autres sites : chaque player est une iframe cross-origin (player.twitch.tv…), le code de cette page ne s’y exécute jamais, et Twitch insère ses pubs dans la vidéo elle-même — il n’y a donc rien à supprimer côté page. Twitch détecte aussi les bloqueurs de pub et refuse alors de jouer : si votre propre bloqueur est actif et qu’un stream ne démarre jamais, son écran affiche « Bloqueur ? » — désactivez l’extension pour ce site. Ce que fait Regie à la place : il détecte les pubs, déplace le son sur un autre stream, et affiche un petit stream en grand et sans le son à côté de l’écran principal jusqu’à la fin de la pub (Twitch ne décompte une pub que sur un player grand et visible : un stream en pub n’est jamais caché ni couvert). Twitch lance ses pubs en pause et ne les déroule qu’après un clic dans le player : un clic sur lecture la lance. Gardez l’onglet visible. Regie peut aussi recharger un player une ou deux fois pour tenter de sauter une pub. Pour bloquer les pubs ailleurs dans votre navigateur, une extension comme uBlock Origin est le seul outil efficace — mais attendez-vous à ce que Twitch s’en aperçoive. La seule option officiellement sans pub sur Twitch est un abonnement Turbo.',
+    'Une page web ne peut pas bloquer les pubs dans les players d’autres sites : chaque player est une iframe cross-origin (player.twitch.tv…), le code de cette page ne s’y exécute jamais, et Twitch insère ses pubs dans la vidéo elle-même. Pour regarder Twitch sans pub, utilisez le relais ou l’extension Regie ci-dessous : le stream passe alors dans le player de Regie. Twitch détecte aussi les bloqueurs de pub et refuse alors de jouer : si votre propre bloqueur est actif et qu’un stream ne démarre jamais, son écran affiche « Bloqueur ? » — désactivez le bloqueur pour ce site.',
   'help.platforms': 'Ce que chaque plateforme permet',
   'help.platformsText':
     'Twitch : volume, avance dans les VOD, latence du direct. YouTube : volume et avance, direct compris. TikTok : son coupé ou non et avance, vidéos seulement (les lives TikTok s’ouvrent dans leur fenêtre). Kick et Dailymotion : son coupé seulement, en rechargeant le player. Vimeo : volume.',
@@ -192,9 +186,7 @@ export const fr: Record<MessageKey, string> = {
   'help.k.pip': 'Mini-régie (au premier plan, continue pendant que vous utilisez d’autres apps)',
   'toast.noPip':
     'Ce navigateur ne sait pas ouvrir une page en picture-in-picture (Chrome et Edge sur ordinateur le peuvent).',
-  'ad.notice':
-    '{name} est en pub : il reste en grand et sans le son jusqu’au retour du stream. Si le décompte ne bouge pas, cliquez sur lecture dans son player',
-  'ad.blockedNotice':
+  'adblock.notice':
     '{name} ne démarre pas tout seul : cliquez sur lecture dans le lecteur. S’il refuse toujours, c’est sans doute un bloqueur de pub — Twitch refuse de jouer avec, désactivez-le pour ce site',
   'help.background': 'En arrière-plan',
   'help.backgroundText':
@@ -210,9 +202,6 @@ export const fr: Record<MessageKey, string> = {
     'Une notification système quand un favori passe en direct pendant que Regie est en arrière-plan.',
   'library.notifyOn': 'Notifications activées',
   'tile.badgeOffline': 'Hors ligne',
-  'help.adReload': 'Recharger un player qui passe en pub',
-  'help.adReloadHint':
-    'Désactivé par défaut : un rechargement coupe le stream quelques secondes. Activé, seulement pour une pub confirmée en cours de stream : un player neuf revient parfois sans. Une fois toutes les cinq minutes au plus, et si le player neuf retombe sur une pub, les pubs de ce stream passent normalement pendant un moment.',
   'relay.title': 'Relais sans pub',
   'relay.text':
     'Facultatif. Un petit serveur que vous lancez vous-même lit les streams Twitch, YouTube et Kick sans leurs pubs, avec le contrôle complet du son et du seek : les lives Twitch et Kick peuvent alors être synchronisés eux aussi. Les autres liens gardent leur player officiel, et sans relais Regie marche comme d’habitude.',

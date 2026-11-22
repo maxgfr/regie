@@ -8,7 +8,7 @@ export interface VideoOptions {
   src?: string
   /**
    * Plays HLS through hls.js even where the browser plays it natively (Safari): only hls.js reports the
-   * latency, caps the quality to the player's size and lets Regie read the relay's ad header.
+   * latency, caps the quality to the player's size and lists the qualities.
    */
   forceHls?: boolean
   /** The stream never started: the caller mounts another player in its place. */
@@ -18,25 +18,6 @@ export interface VideoOptions {
    * `EXTENSION_BASE`). Segments are still fetched by hls.js itself.
    */
   loadPlaylist?: LoadPlaylist
-}
-
-/** Set by the relay on each media playlist: `1` while the stream is in an ad it couldn't avoid (picture frozen). */
-const AD_HEADER = 'X-Regie-Ad'
-
-/**
- * A response header of a playlist, whichever loader hls.js used (XMLHttpRequest, fetch, or the extension's,
- * which hands over a `Response`). Both lookups ignore the header's case.
- */
-function header(details: unknown, name: string): string | null {
-  try {
-    const xhr = details as { getResponseHeader?: (name: string) => string | null }
-    if (typeof xhr?.getResponseHeader === 'function') return xhr.getResponseHeader(name)
-    const response = details as { headers?: { get?: (name: string) => string | null } }
-    if (typeof response?.headers?.get === 'function') return response.headers.get(name)
-  } catch {
-    // Not readable: no hint.
-  }
-  return null
 }
 
 /**
@@ -94,8 +75,6 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
   let played = false
   let failed = false
   let recovered = false
-  /** The relay says the stream is in an ad: the picture is frozen, so its clock isn't reported. */
-  let adOn = false
   // A relayed video may still be remuxed (YouTube): its start is applied once the relay has got that far.
   let pendingStart = options.src ? source.start : undefined
   /** The qualities of the stream hls.js plays, one per name (the best bitrate of each), best first. */
@@ -174,14 +153,6 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
             instance.recoverMediaError()
           } else fail()
         })
-        instance.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
-          const value = header(data.networkDetails, AD_HEADER)
-          if (value === null) return
-          const on = value.trim() === '1'
-          if (on === adOn) return
-          adOn = on
-          events.adHint(on)
-        })
         instance.on(Hls.Events.LEVEL_UPDATED, applyStart)
         instance.on(Hls.Events.MANIFEST_PARSED, reportQuality)
         instance.on(Hls.Events.LEVEL_SWITCHED, reportQuality)
@@ -218,9 +189,6 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
   })
   video.addEventListener('loadedmetadata', applyStart)
   video.addEventListener('durationchange', applyStart)
-  video.addEventListener('timeupdate', () => {
-    if (!adOn) events.progress(video.currentTime)
-  })
   // The sound Regie last set. `volumechange` fires later, once per property written (the initial sound
   // above included), so only a sound that differs from it is the viewer's.
   let expected = { muted: video.muted, volume: video.volume }

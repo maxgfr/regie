@@ -20,7 +20,7 @@ Regie puts several streams from any platform on one screen, lays them out for th
 
 ## Positioning
 
-A control room for viewers. It treats a multiview like a broadcast gallery: one stream on air (it has the sound), one on the main monitor, and the others in preview. On top of that it works across platforms, needs no account, and runs as a static page. It measures and lines up the delays between streams, holds back chat so it doesn't spoil, and moves the sound away from a stream that goes to an ad. Viewers who want the ads gone can run an optional relay of their own; the page never needs it.
+A control room for viewers. It treats a multiview like a broadcast gallery: one stream on air (it has the sound), one on the main monitor, and the others in preview. On top of that it works across platforms, needs no account, and runs as a static page. It measures and lines up the delays between streams, and holds back chat so it doesn't spoil. Viewers who want the ads gone can run an optional relay of their own, or the Regie extension; the page never needs either.
 
 ## Operating Context
 
@@ -32,7 +32,7 @@ A control room for viewers. It treats a multiview like a broadcast gallery: one 
 
 - **Anonymous by design.** No account, no OAuth app, no API key. Only official embeds, plus Twitch's public anonymous read-only chat socket (opt-in), plus the viewer's own relay (opt-in).
 - **Static hosting.** No server of ours: everything runs in the visitor's browser.
-- **Optional ad-free relay.** A small server the viewer runs themselves (`bun run relay`, or their own Docker host). When it answers, Twitch live and VODs, YouTube live and videos, and Kick play from it as HLS in a `<video>`: no ads, full volume and seek (so Twitch and Kick lives can be lined up too), live latency, quality fitted to the monitor, and none of Twitch's embed constraints (400×300, line check). An ad it can't avoid freezes the picture and moves the sound. Everything else, and every tile when the relay is off, unreachable or fails on a stream, keeps its official embed. Its address stays in this browser, never in the URL: a shared link plays on both sides.
+- **Optional ad-free relay.** A small server the viewer runs themselves (`bun run relay`, or their own Docker host). When it answers, Twitch live and VODs, YouTube live and videos, and Kick play from it as HLS in a `<video>`: no ads, full volume and seek (so Twitch and Kick lives can be lined up too), live latency, quality fitted to the monitor, and none of Twitch's embed constraints (400×300, line check). An ad it can't avoid is cut out: the picture holds. Everything else, and every tile when the relay is off, unreachable or fails on a stream, keeps its official embed. Its address stays in this browser, never in the URL: a shared link plays on both sides.
 - **Iframes are cross-origin.** Without the relay, Regie only controls what each player's official API exposes:
   - Twitch: volume, mute, VOD seek, live latency.
   - YouTube: volume, mute, seek, including live DVR.

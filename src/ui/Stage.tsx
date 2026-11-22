@@ -1,4 +1,4 @@
-import { Expand, ExternalLink, Megaphone, Monitor, Radio, Star, Volume2, VolumeX, X } from 'lucide'
+import { Expand, ExternalLink, Monitor, Radio, Star, Volume2, VolumeX, X } from 'lucide'
 import type { Handle } from 'remix/component'
 import { css, on, ref } from 'remix/component'
 import { isFavorite } from '../app/library.ts'
@@ -53,7 +53,7 @@ export function Stage(handle: Handle<{ store: Store }>) {
 
   return () => {
     const { session } = store
-    const focus = store.effectiveFocus()
+    const focus = session.focusId
     const layoutTiles = session.tiles.map((tile) => ({ id: tile.id, aspect: store.caps(tile).aspect }))
     const layout = (boostId: string | null) =>
       computeLayout({
@@ -67,8 +67,8 @@ export function Stage(handle: Handle<{ store: Store }>) {
         chrome: UMD,
       })
     let placed = layout(null)
-    // A Twitch player only starts, and only counts its ads down, when it is at least 400×300 and visible.
-    // A small one that is starting or in an ad is shown large next to the main monitor until it's done.
+    // A Twitch player only starts when it is at least 400×300 and visible. A small one that is starting is
+    // shown large next to the main monitor until it plays (the line check).
     const small = new Set(
       session.tiles
         .filter((tile) => {
@@ -137,8 +137,6 @@ const tileStyle = css({
   // The tally is a ring around the monitor, and every other state lives in the label strip.
   '&[data-tally="pgm"]': { boxShadow: '0 0 0 3px var(--pgm)' },
   '&[data-tally="pvw"]': { boxShadow: '0 0 0 3px var(--pvw)' },
-  '&[data-ad="true"]': { boxShadow: '0 0 0 3px var(--amber)' },
-  '&[data-ad="true"][data-tally="pgm"]': { boxShadow: '0 0 0 3px var(--amber)' },
 })
 
 const umdStyle = css({
@@ -189,7 +187,6 @@ const umdStyle = css({
   },
   '& .tag[data-kind="air"]': { background: 'var(--pgm)', color: '#fff' },
   '& .tag[data-kind="main"]': { background: 'var(--pvw)', color: '#04150a' },
-  '& .tag[data-kind="ad"]': { background: 'var(--amber)', color: '#1a1000' },
   '& .tag[data-kind="hype"]': { background: 'var(--text)', color: '#000' },
   '& .tag[data-kind="offline"]': { background: 'var(--key)', color: 'var(--dim)' },
   '& .tag[data-kind="hls"]': {
@@ -389,7 +386,6 @@ function TileView(handle: Handle<TileProps>) {
       ? minimumScale({ x: 0, y: 0, w: screenW, h: screenH }, TWITCH_MIN_WIDTH, TWITCH_MIN_HEIGHT)
       : 1
     const tally = onAir ? 'pgm' : main ? 'pvw' : 'none'
-    const inAd = runtime?.ad.inAd ?? false
     const name = store.label(id)
     const platform = platformLabel(tile.source.platform)
     const takeover = store.ui.takeover?.id === id
@@ -434,7 +430,6 @@ function TileView(handle: Handle<TileProps>) {
       <article
         data-tile={id}
         data-tally={tally}
-        data-ad={inAd}
         data-overlay={box.overlay}
         data-hidden={!rect}
         data-placed={attached}
@@ -537,11 +532,6 @@ function TileView(handle: Handle<TileProps>) {
                 {t('tile.badgeMain')}
               </span>
             )}
-            {inAd && (
-              <span class="tag" data-kind="ad">
-                {t('tile.badgeAd')}
-              </span>
-            )}
             {store.relayed(id) && (
               <span
                 class="tag"
@@ -627,17 +617,6 @@ function TileView(handle: Handle<TileProps>) {
                 <Icon icon={muted ? VolumeX : Volume2} />
               </button>
             )}
-            <button
-              type="button"
-              title={inAd ? t('tile.adOff') : t('tile.ad')}
-              aria-label={inAd ? t('tile.adOff') : t('tile.ad')}
-              aria-pressed={inAd}
-              data-tone="amber"
-              data-optional
-              mix={on('click', () => store.toggleAd(id))}
-            >
-              <Icon icon={Megaphone} />
-            </button>
             {quality && quality.levels.length > 1 && (
               // A native menu: the system draws its list, so nothing of the page covers a player.
               <select

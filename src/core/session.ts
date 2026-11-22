@@ -7,6 +7,7 @@ import type { AudioMode, LayoutMode, Session, Source, Tile } from './types.ts'
  * - Sources are separated by `+` (older links used `|`, still read). The `s=` key is optional when the
  *   sources come first.
  * - A bare name is a live Twitch channel; anything else is `<code>.<id>` (see `CODES`).
+ * - Retired keys are ignored, so older links still open, and never reused: `as` and `ar` were ad settings.
  */
 
 const CODES: [string, Source['platform'], Source['kind']][] = [
@@ -44,9 +45,7 @@ export function defaultSession(): Session {
     transition: 'cut',
     keywords: [],
     autoDirector: false,
-    adSwitch: true,
     autoAdd: false,
-    adReload: false,
   }
 }
 
@@ -115,9 +114,7 @@ export function encodeSession(session: Session): string {
   if (session.transition === 'mix') params.set('x', 'mix')
   if (session.keywords.length) params.set('k', session.keywords.join(','))
   if (session.autoDirector) params.set('ad', '1')
-  if (!session.adSwitch) params.set('as', '0')
   if (session.autoAdd) params.set('aa', '1')
-  if (session.adReload) params.set('ar', '1')
   return params.toString()
 }
 
@@ -171,9 +168,7 @@ export function decodeSession(hash: string, base: Session = defaultSession()): S
   session.liveChat = flag('lc', '1', base.liveChat)
   session.antiSpoiler = flag('sp', '1', base.antiSpoiler)
   session.autoDirector = flag('ad', '1', base.autoDirector)
-  session.adSwitch = flag('as', '1', base.adSwitch)
   session.autoAdd = flag('aa', '1', base.autoAdd)
-  session.adReload = flag('ar', '1', base.adReload)
   const transition = params.get('x')
   if (transition === 'mix' || transition === 'cut') session.transition = transition
   if (params.has('k')) {

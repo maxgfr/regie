@@ -4,7 +4,6 @@ import {
   FastForward,
   FolderOpen,
   Link2,
-  MegaphoneOff,
   MessagesSquare,
   Pause,
   PictureInPicture2,
@@ -118,7 +117,7 @@ export function Console(handle: Handle<{ store: Store; inputRef: (node: HTMLInpu
     const { session } = store
     const tiles = session.tiles
     const mix = store.mix()
-    const focus = store.effectiveFocus()
+    const focus = session.focusId
     const seekable = tiles.some((tile) => store.caps(tile).seek)
     const layouts: [LayoutMode, string][] = [
       ['grid', t('layout.grid')],
@@ -338,14 +337,6 @@ export function Console(handle: Handle<{ store: Store; inputRef: (node: HTMLInpu
               tone="amber"
               disabled={tiles.length < 2}
               onPress={() => store.openSync(!store.ui.syncOpen)}
-            />
-            <Key
-              label={<Icon icon={MegaphoneOff} />}
-              ariaLabel={t('console.adSwitch')}
-              title={`${t('console.adSwitch')}: ${t('console.adSwitchHint')}`}
-              pressed={session.adSwitch}
-              tone="amber"
-              onPress={() => store.setAdSwitch(!session.adSwitch)}
             />
             <Key
               label={<Icon icon={MessagesSquare} />}
