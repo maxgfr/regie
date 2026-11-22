@@ -8,6 +8,7 @@ import {
   parseTwitchQuality,
   pickQuality,
   type Quality,
+  qualityLabel,
   recordStall,
   STALL_WINDOW_MS,
 } from './quality.ts'
@@ -73,4 +74,12 @@ test('two stalls close together take one level off; a clean stretch gives it bac
   expect(decayStalls(state, state.at + PENALTY_DECAY_MS).penalty).toBe(0)
   for (let i = 0; i < 20; i++) state = recordStall(state, 100_000 + i)
   expect(state.penalty).toBe(MAX_PENALTY)
+})
+
+test('a quality is named like Twitch names its own', () => {
+  expect(qualityLabel(1080, 60)).toBe('1080p60')
+  expect(qualityLabel(720, 59.94)).toBe('720p60')
+  expect(qualityLabel(480, 30)).toBe('480p')
+  expect(qualityLabel(360, 0)).toBe('360p')
+  expect(qualityLabel(0, 0)).toBe('audio')
 })

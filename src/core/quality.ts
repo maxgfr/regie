@@ -97,3 +97,13 @@ export function decayStalls(state: StallState, now: number): StallState {
   if (state.penalty === 0 || now - state.at < PENALTY_DECAY_MS) return state
   return { ...state, penalty: state.penalty - 1, at: now }
 }
+
+/**
+ * How a quality is named in a menu, the way Twitch names its own: `1080p60`, `720p` (the frame rate only
+ * when it is above 30), `audio` for a stream without a picture.
+ */
+export function qualityLabel(height: number, fps: number): string {
+  if (!height) return 'audio'
+  const rate = Math.round(fps)
+  return rate > 30 ? `${height}p${rate}` : `${height}p`
+}

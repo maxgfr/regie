@@ -1,4 +1,5 @@
 import type HlsType from 'hls.js'
+import { qualityLabel } from '../core/quality.ts'
 import { bridgePlaylistLoader, type LoadPlaylist } from './bridge-loader.ts'
 import type { Player, PlayerContext } from './types.ts'
 
@@ -82,6 +83,29 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
   let adOn = false
   // A relayed video may still be remuxed (YouTube): its start is applied once the relay has got that far.
   let pendingStart = options.src ? source.start : undefined
+  /** The qualities of the stream hls.js plays, one per name (the best bitrate of each), best first. */
+  const reportQuality = () => {
+    if (!hls) return
+    const seen = new Set<string>()
+    const levels = hls.levels
+      .map((level, index) => ({ index, height: level.height || 0, fps: level.frameRate || 0, bitrate: level.bitrate }))
+      .filter((level) => level.height > 0)
+      .toSorted((a, b) => b.height - a.height || b.fps - a.fps || b.bitrate - a.bitrate)
+      .flatMap((level) => {
+        const label = qualityLabel(level.height, level.fps)
+        if (seen.has(label)) return []
+        seen.add(label)
+        return [{ id: String(level.index), label }]
+      })
+    const current = hls.levels[hls.currentLevel]
+    // hls.js keeps the level asked for (-1: its own choice), and moves it when it drops a failing level.
+    const manual = hls.manualLevel
+    events.quality({
+      levels,
+      selected: manual >= 0 ? String(manual) : null,
+      playing: current ? qualityLabel(current.height || 0, current.frameRate || 0) : null,
+    })
+  }
 
   /** Before the first picture, the caller can fall back to another player; after it, the stream is offline. */
   const fail = () => {
@@ -144,6 +168,9 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
           events.adHint(on)
         })
         instance.on(Hls.Events.LEVEL_UPDATED, applyStart)
+        instance.on(Hls.Events.MANIFEST_PARSED, reportQuality)
+        instance.on(Hls.Events.LEVEL_SWITCHED, reportQuality)
+        instance.on(Hls.Events.LEVELS_UPDATED, reportQuality)
         instance.on(Hls.Events.FRAG_CHANGED, () => {
           if (!relayed || source.kind !== 'live') return
           const latency = instance.latency
@@ -196,6 +223,14 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
       video.muted = muted
       video.volume = level
       expected = { muted: video.muted, volume: video.volume }
+    },
+    setQuality(id) {
+      if (!hls) return
+      const index = id === null ? -1 : Number(id)
+      if (!Number.isInteger(index) || index >= hls.levels.length) return
+      // `nextLevel` switches from the next segment on, without stopping the picture; -1 is hls.js's own choice.
+      hls.nextLevel = index
+      reportQuality()
     },
     play() {
       video.play().catch(() => undefined)

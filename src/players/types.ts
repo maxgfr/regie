@@ -13,6 +13,24 @@ export interface PlayerEvents {
   adHint(on: boolean): void
   /** The viewer changed the sound inside the player itself (its mute button or volume slider). */
   userVolume(volume: number, muted: boolean): void
+  /** The qualities a player can be switched to (`setQuality`), and the one it plays: on load and on each switch. */
+  quality(state: QualityState): void
+}
+
+export interface QualityLevel {
+  /** Value to pass back to `setQuality`. */
+  id: string
+  /** Shown in the menu, and how a choice is kept across a remount: `1080p60`, `720p`. */
+  label: string
+}
+
+export interface QualityState {
+  /** Best first. */
+  levels: QualityLevel[]
+  /** The level asked for, or null when the player picks it itself (from the connection and the monitor's size). */
+  selected: string | null
+  /** The label of the level playing now, if known: it trails `selected` until the switch is done. */
+  playing: string | null
 }
 
 export interface Player {
@@ -24,6 +42,8 @@ export interface Player {
   seekBy(seconds: number): boolean
   /** Matches the stream quality to the size the player is shown at (`main` keeps automatic quality). */
   fit?(displayHeight: number, main: boolean): void
+  /** Plays one of the levels it reported (`PlayerEvents.quality`), or chooses by itself again with null. */
+  setQuality?(id: string | null): void
   destroy(): void
 }
 

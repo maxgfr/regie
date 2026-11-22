@@ -223,6 +223,9 @@ export const en = {
   'tile.badgeHls': 'HLS',
   'tile.hlsHint': 'Played through your relay, without ads',
   'tile.hlsHintExtension': 'Played through the Regie extension, without ads',
+  'tile.quality': 'Stream quality',
+  'tile.qualityAuto': 'Auto',
+  'tile.qualityAutoAt': 'Auto · {q}',
   'drop.hint': 'Drop the link to add the stream',
 } as const
 

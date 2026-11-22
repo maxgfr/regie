@@ -222,6 +222,21 @@ const umdStyle = css({
     color: 'var(--dim)',
   },
   '& .tools button:hover, & .tools a:hover': { background: 'var(--key-hover)', color: 'var(--text)' },
+  '& .tools select': {
+    height: '24px',
+    maxWidth: '116px',
+    padding: '0 4px',
+    border: 0,
+    borderRadius: '3px',
+    background: 'transparent',
+    color: 'var(--dim)',
+    fontFamily: 'var(--font-mono)',
+    fontVariantNumeric: 'tabular-nums',
+    fontSize: '12px',
+    cursor: 'pointer',
+  },
+  '& .tools select:hover': { background: 'var(--key-hover)', color: 'var(--text)' },
+  '& .tools select option': { background: '#1d2023', color: 'var(--text)' },
   '& .tools [aria-pressed="true"][data-tone="red"]': { color: 'var(--pgm-ink)' },
   '& .tools [aria-pressed="true"][data-tone="green"]': { color: 'var(--pvw)' },
   '& .tools [aria-pressed="true"][data-tone="amber"]': { color: 'var(--amber)' },
@@ -413,6 +428,7 @@ function TileView(handle: Handle<TileProps>) {
     }
     const marked = runtime?.mark !== undefined
     const muted = tile.muted || tile.volume === 0
+    const quality = runtime?.quality
 
     return (
       <article
@@ -622,6 +638,26 @@ function TileView(handle: Handle<TileProps>) {
             >
               <Icon icon={Megaphone} />
             </button>
+            {quality && quality.levels.length > 1 && (
+              // A native menu: the system draws its list, so nothing of the page covers a player.
+              <select
+                class="quality"
+                title={t('tile.quality')}
+                aria-label={t('tile.quality')}
+                data-optional
+                value={quality.selected ?? ''}
+                mix={on('change', (event) => store.setQuality(id, event.currentTarget.value || null))}
+              >
+                <option value="" selected={quality.selected === null}>
+                  {quality.playing ? t('tile.qualityAutoAt', { q: quality.playing }) : t('tile.qualityAuto')}
+                </option>
+                {quality.levels.map((level) => (
+                  <option value={level.id} selected={quality.selected === level.id}>
+                    {level.label}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               type="button"
               title={t('tile.fullscreen')}

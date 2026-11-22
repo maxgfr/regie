@@ -28,4 +28,12 @@ export function createPlayer(context: PlayerContext): Player | null {
   return createIframePlayer(context)
 }
 
-export type { PlaybackState, Player, PlayerContext, PlayerEvents, PlayerRelay } from './types.ts'
+export type {
+  PlaybackState,
+  Player,
+  PlayerContext,
+  PlayerEvents,
+  PlayerRelay,
+  QualityLevel,
+  QualityState,
+} from './types.ts'

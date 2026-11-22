@@ -43,7 +43,7 @@ import { extension, extensionHealth } from '../platforms/extension.ts'
 import { capabilities, sourceName } from '../platforms/parse.ts'
 import { relayHealth } from '../platforms/relay.ts'
 import { fetchTitle } from '../platforms/titles.ts'
-import { createPlayer, type PlaybackState, type Player, type PlayerRelay } from '../players/index.ts'
+import { createPlayer, type PlaybackState, type Player, type PlayerRelay, type QualityState } from '../players/index.ts'
 import { canPlayWithSound } from '../players/load-script.ts'
 import * as library from './library.ts'
 
@@ -82,6 +82,8 @@ export interface TileRuntime {
   info?: Creator
   /** Clap time for sync, `performance.now()` ms. */
   mark?: number
+  /** The qualities the current player can be switched to (an HLS one), and the one it plays. */
+  quality?: QualityState
 }
 
 /** Players are other sites' code: a failing call must never break the control room. */
@@ -412,6 +414,10 @@ export class Store extends TypedEventTarget<Events> {
       return
     }
     const target = this.#relayTarget(tile)
+    // A new player reports its own qualities; the viewer's choice is applied to it once it has.
+    const mounting = this.runtime.get(id)
+    if (mounting) mounting.quality = undefined
+    this.#qualityApplied.delete(id)
     const player = createPlayer({
       source: tile.source,
       container,
@@ -452,6 +458,7 @@ export class Store extends TypedEventTarget<Events> {
           runtime.latency = Math.max(0, seconds - delay)
         },
         userVolume: (volume, muted) => this.#fromPlayer(id, volume, muted),
+        quality: (state) => this.#onQuality(id, state),
         adHint: (on) => {
           const runtime = this.runtime.get(id)
           // A player that opens on a pre-roll ad has started, even if "playing" only comes after the ad.
@@ -870,6 +877,43 @@ export class Store extends TypedEventTarget<Events> {
     this.#unfitted.clear()
   }
 
+  /**
+   * The quality the viewer picked for each tile, by label (`720p60`): a player mounted again (relay change,
+   * reload) numbers its levels its own way. Kept for this visit only, never in the link.
+   */
+  #qualityChoice = new Map<string, string>()
+  /** Tiles whose current player already got the viewer's choice. */
+  #qualityApplied = new Set<string>()
+
+  #onQuality(id: string, state: QualityState) {
+    const runtime = this.runtime.get(id)
+    if (!runtime) return
+    runtime.quality = state
+    const choice = this.#qualityChoice.get(id)
+    if (choice !== undefined && !this.#qualityApplied.has(id) && state.levels.length) {
+      this.#qualityApplied.add(id)
+      const level = state.levels.find((candidate) => candidate.label === choice)
+      const player = this.players.get(id)
+      if (level && state.selected === null && player?.setQuality) {
+        safely(() => player.setQuality?.(level.id))
+        return
+      }
+    }
+    this.#emit('change')
+  }
+
+  /** Plays a tile at one of the qualities its player reported, or lets the player choose again (null). */
+  setQuality(id: string, levelId: string | null) {
+    const player = this.players.get(id)
+    const runtime = this.runtime.get(id)
+    if (!player?.setQuality || !runtime?.quality) return
+    const label = runtime.quality.levels.find((level) => level.id === levelId)?.label
+    if (label) this.#qualityChoice.set(id, label)
+    else this.#qualityChoice.delete(id)
+    this.#qualityApplied.add(id)
+    safely(() => player.setQuality?.(label ? levelId : null))
+  }
+
   /** Players that never started (autoplay refused) get another go on the next user gesture. */
   #resumeStalled() {
     for (const [id, player] of this.players) {
@@ -885,6 +929,8 @@ export class Store extends TypedEventTarget<Events> {
     this.#reloads.delete(id)
     this.#fits.delete(id)
     this.#unfitted.delete(id)
+    this.#qualityChoice.delete(id)
+    this.#qualityApplied.delete(id)
   }
 
   #detach(id: string) {

@@ -231,5 +231,8 @@ export const fr: Record<MessageKey, string> = {
   'tile.badgeHls': 'HLS',
   'tile.hlsHint': 'Lu via votre relais, sans pub',
   'tile.hlsHintExtension': 'Lu via l’extension Regie, sans pub',
+  'tile.quality': 'Qualité du stream',
+  'tile.qualityAuto': 'Auto',
+  'tile.qualityAutoAt': 'Auto · {q}',
   'drop.hint': 'Lâchez le lien pour ajouter le stream',
 }

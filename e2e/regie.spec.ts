@@ -359,7 +359,17 @@ const CORS = { 'access-control-allow-origin': '*', 'access-control-expose-header
  * A relay saved in this browser, stubbed: `health` says whether it answers, `play` whether its playlist
  * loads. The playlists are real HLS; the segment never arrives, so the player stays on the relay, loading.
  */
-async function relay(page: Page, { health, play }: { health: boolean; play: boolean }) {
+/** The qualities the relay stub's master offers with `levels` (one 360p otherwise). */
+const LEVELS = [
+  'BANDWIDTH=6000000,RESOLUTION=1920x1080,FRAME-RATE=60.000',
+  'BANDWIDTH=3000000,RESOLUTION=1280x720,FRAME-RATE=30.000',
+  'BANDWIDTH=800000,RESOLUTION=640x360,FRAME-RATE=30.000',
+]
+
+async function relay(
+  page: Page,
+  { health, play, levels = false }: { health: boolean; play: boolean; levels?: boolean },
+) {
   const requests: string[] = []
   await page.addInitScript((url) => {
     localStorage.setItem('regie:preferences', JSON.stringify({ relayUrl: url, relayKey: '' }))
@@ -382,11 +392,10 @@ async function relay(page: Page, { health, play }: { health: boolean; play: bool
     const m3u8 = { ...CORS, 'content-type': 'application/vnd.apple.mpegurl', 'x-regie-ad': '0' }
     if (url.pathname === '/play.m3u8') {
       if (!play) return route.fulfill({ status: 502, headers: CORS, body: 'upstream failed' })
-      return route.fulfill({
-        status: 200,
-        headers: m3u8,
-        body: `#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360\n${RELAY}/v/s1/360p.m3u8\n`,
-      })
+      const variants = levels
+        ? LEVELS.map((attrs) => `#EXT-X-STREAM-INF:${attrs}\n${RELAY}/v/s1/${/x(\d+)/.exec(attrs)?.[1]}p.m3u8`)
+        : [`#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360\n${RELAY}/v/s1/360p.m3u8`]
+      return route.fulfill({ status: 200, headers: m3u8, body: `#EXTM3U\n${variants.join('\n')}\n` })
     }
     if (url.pathname.endsWith('.m3u8')) {
       return route.fulfill({
@@ -441,6 +450,30 @@ test('a relayed stream on air gets its sound: starting muted is not the viewer m
   await page.keyboard.press('Shift')
   await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.muted)).toBe(false)
   await expect(page.locator('[data-tile]').getByRole('button', { name: 'Unmute' })).toHaveCount(0)
+  await page.unrouteAll({ behavior: 'ignoreErrors' })
+})
+
+test('a relayed stream picks its quality by itself, or plays the one chosen under it', async ({ page }) => {
+  const requests = await relay(page, { health: true, play: true, levels: true })
+  await page.goto('/#s=tw.alpha')
+  const menu = page.locator('[data-tile]').getByRole('combobox', { name: 'Stream quality' })
+  await expect(menu).toBeVisible()
+  await expect(menu.locator('option')).toHaveText([/^Auto/, '1080p60', '720p', '360p'])
+  await expect(menu).toHaveValue('')
+  await menu.selectOption({ label: '720p' })
+  await expect(menu).not.toHaveValue('')
+  await expect.poll(() => requests.some((path) => path.startsWith('/v/s1/720p.m3u8'))).toBe(true)
+  await menu.selectOption({ index: 0 })
+  await expect(menu).toHaveValue('')
+  await page.unrouteAll({ behavior: 'ignoreErrors' })
+})
+
+test('a stream with a single quality has no quality menu', async ({ page }) => {
+  await relay(page, { health: true, play: true })
+  await page.goto('/#s=tw.alpha')
+  await expect(page.locator('[data-tile] video')).toHaveCount(1)
+  await page.waitForTimeout(500)
+  await expect(page.locator('[data-tile]').getByRole('combobox', { name: 'Stream quality' })).toHaveCount(0)
   await page.unrouteAll({ behavior: 'ignoreErrors' })
 })
 
