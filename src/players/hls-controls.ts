@@ -156,20 +156,35 @@ export function createControls(container: HTMLElement, video: HTMLVideoElement, 
     }
   }
 
-  play.addEventListener('click', () => (video.paused ? video.play().catch(() => undefined) : video.pause()), { signal })
-  mute.addEventListener(
-    'click',
-    () => {
-      if (silent()) {
-        video.muted = false
-        video.volume = lastLevel
-      } else {
-        lastLevel = video.volume
-        video.muted = true
-      }
-    },
-    { signal },
-  )
+  /**
+   * A key acts on the press itself, not on the click: the page may move under the pointer before it is
+   * released (the first click in Regie removes its "click to enable the sound" notice, and the wall moves up),
+   * and a click released elsewhere never fires. The keyboard (Enter, Space) still comes through `click`.
+   */
+  const press = (element: HTMLElement, action: () => void) => {
+    element.addEventListener(
+      'pointerdown',
+      (event) => {
+        if (event.button !== 0) return
+        event.preventDefault()
+        action()
+      },
+      { signal },
+    )
+    element.addEventListener('click', (event) => event.detail === 0 && action(), { signal })
+  }
+
+  const togglePlay = () => (video.paused ? video.play().catch(() => undefined) : video.pause())
+  press(play, togglePlay)
+  press(mute, () => {
+    if (silent()) {
+      video.muted = false
+      video.volume = lastLevel
+    } else {
+      lastLevel = video.volume
+      video.muted = true
+    }
+  })
   volume.addEventListener(
     'input',
     () => {
@@ -182,23 +197,19 @@ export function createControls(container: HTMLElement, video: HTMLVideoElement, 
     },
     { signal },
   )
-  live.addEventListener('click', () => actions.goLive(), { signal })
+  press(live, () => actions.goLive())
   quality.addEventListener('change', () => actions.setQuality(quality.value || null), { signal })
-  pip.addEventListener(
-    'click',
-    () => {
-      if (doc.pictureInPictureElement === video) doc.exitPictureInPicture().catch(() => undefined)
-      else video.requestPictureInPicture().catch(() => undefined)
-    },
-    { signal },
-  )
+  press(pip, () => {
+    if (doc.pictureInPictureElement === video) doc.exitPictureInPicture().catch(() => undefined)
+    else video.requestPictureInPicture().catch(() => undefined)
+  })
   const toggleFullscreen = () => {
     if (doc.fullscreenElement === container) doc.exitFullscreen().catch(() => undefined)
     else container.requestFullscreen?.().catch(() => undefined)
   }
-  full.addEventListener('click', toggleFullscreen, { signal })
+  press(full, toggleFullscreen)
   // On the picture itself: a click plays or pauses, a double click goes full screen, as in most players.
-  video.addEventListener('click', () => play.click(), { signal })
+  video.addEventListener('click', togglePlay, { signal })
   video.addEventListener('dblclick', toggleFullscreen, { signal })
   for (const type of ['play', 'pause', 'volumechange'] as const) video.addEventListener(type, render, { signal })
   doc.addEventListener('fullscreenchange', render, { signal })
