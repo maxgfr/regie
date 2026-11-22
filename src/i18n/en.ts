@@ -226,6 +226,16 @@ export const en = {
   'tile.quality': 'Stream quality',
   'tile.qualityAuto': 'Auto',
   'tile.qualityAutoAt': 'Auto · {q}',
+  'player.play': 'Play',
+  'player.pause': 'Pause',
+  'player.mute': 'Mute',
+  'player.unmute': 'Unmute',
+  'player.volume': 'Volume',
+  'player.live': 'Live',
+  'player.goLive': 'Back to live',
+  'player.pip': 'Picture in picture',
+  'player.fullscreen': 'Full screen',
+  'player.exitFullscreen': 'Exit full screen',
   'drop.hint': 'Drop the link to add the stream',
 } as const
 
