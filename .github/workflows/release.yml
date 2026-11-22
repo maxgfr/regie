@@ -23,13 +23,19 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
+      # The release builds the extension, with the version it is about to tag (`.releaserc.json`).
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
       # Conventional commits decide the bump (feat → minor, fix → patch, BREAKING CHANGE → major); the release
-      # is a tag plus a GitHub release with notes, nothing is committed back.
+      # is a tag plus a GitHub release with notes and the extension's zip, nothing is committed back.
       - run: >-
           npx --yes
           -p semantic-release@25.0.9
           -p @semantic-release/commit-analyzer@13.0.1
           -p @semantic-release/release-notes-generator@14.1.1
+          -p @semantic-release/exec@7.1.0
           -p @semantic-release/github@12.0.9
           semantic-release
         env:

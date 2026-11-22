@@ -4,6 +4,17 @@
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
-    "@semantic-release/github"
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "bun scripts/build-extension.ts --version ${nextRelease.version} --zip"
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [{ "path": "regie-extension.zip", "label": "Regie extension (Chrome, unzip and load unpacked)" }]
+      }
+    ]
   ]
 }

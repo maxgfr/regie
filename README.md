@@ -59,7 +59,7 @@ Built for the evening when a tournament runs on five channels at once: the main 
   - A shortcut opens creator search.
   - The interface works offline, though the streams need the network.
   - English and French. The screen stays awake while streams play.
-- **In the background.** Streams keep playing in a background tab or a minimised window. Twitch pauses an ad on an official embed while the tab is hidden (an ad nobody sees doesn't count down): Regie keeps the sound away from it meanwhile and starts it again when you come back. With the [extension](#browser-extension-optional), Twitch tiles play through it, and embeds keep their ad running in a background tab. On phones, the system pauses other sites' players when the browser leaves the screen, and no web page can prevent that: keep Regie in front, or use the mini control room on a computer.
+- **In the background.** Streams played as HLS (through the [relay](#ad-free-relay-optional) or the [extension](#browser-extension-optional)) all keep playing in a background tab or a minimised window, the silent ones too, once you have clicked or pressed a key in Regie. Official embeds are other sites' players: the one you hear keeps playing, but Twitch and YouTube pause a muted embed while the tab is hidden, and Regie starts it again when you come back. Twitch also pauses an ad on an official embed while the tab is hidden (an ad nobody sees doesn't count down): Regie keeps the sound away from it meanwhile. With the extension, embeds keep their ad running in a background tab. On phones, the system pauses other sites' players when the browser leaves the screen, and no web page can prevent that: keep Regie in front, or use the mini control room on a computer.
 
 ## What a web page can't do
 
@@ -147,13 +147,15 @@ More in [relay/README.md](relay/README.md).
 
 The "Regie relay" Chrome extension runs the same engine as the relay, inside the browser, with nothing to run or configure. It plays **Twitch only** (live and VODs, not clips) as HLS in Regie's own player, without ads, with the same full volume, seek and latency as the relay. YouTube, Kick and the rest keep their embeds unless a server relay is up.
 
-Build it and load it unpacked:
+Download `regie-extension.zip` from the [latest release](https://github.com/maxgfr/regie/releases/latest) and unzip it, or build it yourself:
 
 ```sh
 bun run build:extension   # writes dist-extension/
 ```
 
-Then open `chrome://extensions`, turn on Developer mode, click "Load unpacked" and pick `dist-extension/`. Reload Regie: the help sheet says "Regie extension connected".
+Then open `chrome://extensions`, turn on Developer mode, click "Load unpacked" and pick the unzipped folder (or `dist-extension/`). Reload Regie: the help sheet says "Regie extension connected". To update it, replace the folder's content with a newer release and click the reload arrow on the extension's card; its version is the release's.
+
+Each push to `main` that changes something for users is released: the version comes from the commit messages (`feat` → minor, `fix` → patch), and the release on GitHub gets its notes and the extension's zip, built with that version.
 
 - **A server relay wins.** When a relay is set in the help sheet and answers, every tile it can play goes through it; the extension takes the Twitch tiles only when no relay is up.
 - **No extension, no change.** Without it (or once it is disabled or reloaded), Twitch tiles keep their official embed, and a stream the extension can't play falls back to its embed in place.
