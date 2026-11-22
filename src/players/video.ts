@@ -68,7 +68,9 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
   video.controls = false
   video.crossOrigin = 'anonymous'
   video.muted = context.initialVolume <= 0 && !soundAllowed()
-  video.volume = Math.max(0, Math.min(1, context.initialVolume))
+  // Silent but not at 0 once the page may play sound (`SILENT_VOLUME`): a tile mounted after the first gesture too.
+  video.volume =
+    context.initialVolume <= 0 && !video.muted ? SILENT_VOLUME : Math.max(0, Math.min(1, context.initialVolume))
   video.style.cssText = 'width:100%;height:100%;display:block;background:#000;object-fit:contain'
   if (source.kind === 'live') lockRealTime(video)
   container.append(video)
@@ -226,21 +228,58 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
     events.userVolume(video.volume, video.muted)
   })
 
-  /** The volume Regie asks for: a silent video started `muted` only because the page couldn't play sound yet. */
+  /** The volume Regie asks for: a video may be `muted` only because the page couldn't play sound yet. */
   let wanted = context.initialVolume
-  // Once someone uses the page (a click in a player's frame counts: the page loses the focus), a video Regie
-  // keeps silent stops being `muted`, or a background tab would pause it (`soundAllowed`).
+  /** Regie paused it (the wall's pause key): nothing starts it again behind the viewer's back. */
+  let held = false
+
+  /**
+   * Starts the video as soon as it can play, without waiting on the browser's own autoplay, which may not
+   * come (a stream attached through hls.js, a tab opened in the background). A start with sound that the
+   * browser refuses starts muted instead, which is always allowed: the sound comes with the first gesture.
+   */
+  const start = () => {
+    if (destroyed || played || held || !video.paused) return
+    video.play().catch((error: unknown) => {
+      if (destroyed || held || video.muted || (error as { name?: string } | null)?.name !== 'NotAllowedError') return
+      video.muted = true
+      expected = { muted: video.muted, volume: video.volume }
+      video.play().catch(() => undefined)
+      soundOnNextGesture()
+    })
+  }
+
+  /** A video the browser made start muted gets the sound Regie wants back with the viewer's next gesture. */
+  const regain = new AbortController()
+  const soundOnNextGesture = () => {
+    const restore = () =>
+      setTimeout(() => {
+        if (destroyed || !video.muted || wanted <= 0) return
+        video.volume = Math.min(1, wanted)
+        video.muted = false
+        expected = { muted: video.muted, volume: video.volume }
+      }, 0)
+    for (const type of ['pointerdown', 'keydown'] as const)
+      window.addEventListener(type, restore, { capture: true, once: true, signal: regain.signal })
+  }
+  video.addEventListener('loadeddata', start)
+  video.addEventListener('canplay', start)
+
+  // Once someone uses the page (a click in a player's frame counts: the page loses the focus), a video that is
+  // `muted` only for lack of that gets its sound, and one Regie keeps silent plays at `SILENT_VOLUME`: a muted
+  // video is paused in a background tab.
   const unlock = new AbortController()
   const onActivation = () =>
     setTimeout(() => {
       if (destroyed || !soundAllowed()) return
       unlock.abort()
-      if (wanted > 0 || !video.muted) return
-      video.volume = SILENT_VOLUME
+      if (!video.muted) return
+      video.volume = wanted > 0 ? Math.min(1, wanted) : SILENT_VOLUME
       video.muted = false
       expected = { muted: video.muted, volume: video.volume }
+      start()
     }, 0)
-  if (video.muted) {
+  if (!soundAllowed()) {
     for (const type of ['pointerdown', 'keydown'] as const)
       window.addEventListener(type, onActivation, { capture: true, signal: unlock.signal })
     window.addEventListener('blur', onActivation, { signal: unlock.signal })
@@ -260,9 +299,12 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
     },
     setQuality,
     play() {
-      video.play().catch(() => undefined)
+      held = false
+      if (played) video.play().catch(() => undefined)
+      else start()
     },
     pause() {
+      held = true
       ourPause = true
       video.pause()
     },
@@ -286,6 +328,7 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
     destroy() {
       destroyed = true
       unlock.abort()
+      regain.abort()
       controls.destroy()
       hls?.destroy()
       video.removeAttribute('src')

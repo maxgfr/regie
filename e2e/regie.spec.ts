@@ -221,6 +221,34 @@ test('a monitor in full screen fills the display, picture included', async ({ pa
     .toBeLessThan(1440)
 })
 
+test('a video starts as soon as it can play; refused with sound, it starts muted and gets its sound back on a key', async ({
+  page,
+}) => {
+  // The browser refuses any start with sound (as Brave may), and records each start Regie asks for.
+  await page.addInitScript(() => {
+    const starts: string[] = []
+    ;(window as unknown as { __starts: string[] }).__starts = starts
+    HTMLMediaElement.prototype.play = function play(this: HTMLMediaElement) {
+      starts.push(this.muted ? 'muted' : 'sound')
+      return this.muted ? Promise.resolve() : Promise.reject(new DOMException('refused', 'NotAllowedError'))
+    }
+  })
+  await page.goto('/#s=v.https://example.com/a.mp4')
+  const video = page.locator('[data-tile] video')
+  await expect(video).toHaveCount(1)
+  const starts = () => page.evaluate(() => (window as unknown as { __starts: string[] }).__starts.join(','))
+  // The page may play sound now: the tile on air is given its sound.
+  await page.keyboard.press('Shift')
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.muted)).toBe(false)
+  // The stream can play: Regie starts it itself, and when the sound is refused, starts it muted.
+  await video.evaluate((element: HTMLVideoElement) => element.dispatchEvent(new Event('canplay')))
+  await expect.poll(starts).toMatch(/sound,muted$/)
+  expect(await video.evaluate((element: HTMLVideoElement) => element.muted)).toBe(true)
+  // The next key gives the sound back.
+  await page.keyboard.press('Shift')
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.muted)).toBe(false)
+})
+
 test('muting or unmuting inside a player is followed, not overridden', async ({ page }) => {
   await page.goto('/#s=v.https://example.com/a.mp4|v.https://example.com/b.mp4')
   await expect(page.locator('[data-tile] video')).toHaveCount(2)
@@ -357,12 +385,11 @@ test('once the page may play sound, a silent relayed stream is not muted: a back
   await expect(videos).toHaveCount(2)
   const sound = () =>
     videos.evaluateAll((elements: HTMLVideoElement[]) => elements.map((v) => ({ muted: v.muted, volume: v.volume })))
-  // Before anyone uses the page, a silent video can only autoplay muted.
-  await expect.poll(async () => (await sound()).filter((s) => s.muted).length, { timeout: 15_000 }).toBeGreaterThan(0)
   await page.keyboard.press('Shift')
-  await expect.poll(async () => (await sound()).some((s) => s.muted), { timeout: 15_000 }).toBe(false)
+  await expect.poll(async () => (await sound()).some((s) => s.muted)).toBe(false)
+  // The tile on air fades its sound in: once it has, only the other one is silent, and not at 0.
+  await expect.poll(async () => (await sound()).filter((s) => s.volume < 0.01).length).toBe(1)
   const silent = (await sound()).filter((s) => s.volume < 0.01)
-  expect(silent).toHaveLength(1)
   expect(silent[0]?.volume).toBeGreaterThan(0)
   await page.unrouteAll({ behavior: 'ignoreErrors' })
 })
