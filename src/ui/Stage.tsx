@@ -367,7 +367,9 @@ function TileView(handle: Handle<TileProps>) {
     const box = rect ?? { x: 0, y: 0, w: 0, h: 0, overlay: false }
     const screenW = box.w
     const screenH = Math.max(0, box.h - UMD)
-    // Twitch's embed refuses to play below 400×300: render it at that size and scale it down.
+    // Twitch's embed refuses to play below 400×300: render it at that size and scale it down, with `zoom`.
+    // A `transform: scale()` makes the player's IntersectionObserver (`trackVisibility`) report it hidden, and
+    // Twitch pauses it for good.
     const scale = store.embedTwitch(id)
       ? minimumScale({ x: 0, y: 0, w: screenW, h: screenH }, TWITCH_MIN_WIDTH, TWITCH_MIN_HEIGHT)
       : 1
@@ -455,11 +457,11 @@ function TileView(handle: Handle<TileProps>) {
             class="player"
             style={
               fullscreen
-                ? { width: '100%', height: '100%', transform: 'none' }
+                ? { width: '100%', height: '100%', zoom: '1' }
                 : {
                     width: `${screenW / scale}px`,
                     height: `${screenH / scale}px`,
-                    transform: scale < 1 ? `scale(${scale})` : 'none',
+                    zoom: scale < 1 ? String(scale) : '1',
                   }
             }
             mix={tile.source.kind === 'unembeddable' ? undefined : mount}
