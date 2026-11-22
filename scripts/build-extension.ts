@@ -1,4 +1,4 @@
-import { cp, mkdir, rm } from 'node:fs/promises'
+import { cp, rm } from 'node:fs/promises'
 
 /** The "Regie relay" browser extension (Chrome, MV3), unpacked in `dist-extension/`. */
 const out = 'dist-extension'
@@ -22,8 +22,6 @@ for (const build of builds) {
 
 await cp('extension/manifest.json', `${out}/manifest.json`)
 await cp('extension/rules.json', `${out}/rules.json`)
-await mkdir(`${out}/icons`, { recursive: true })
-// Chrome scales the icons it is given; the 192 px app icon serves the small sizes.
-await cp('public/icon-192.png', `${out}/icons/icon-48.png`)
-await cp('public/icon-192.png', `${out}/icons/icon-128.png`)
+// Rendered from `public/icon.svg` with transparent corners by `scripts/extension-icons.ts`.
+await cp('extension/icons', `${out}/icons`, { recursive: true })
 console.log(`Built the extension in ${out}/ (${files} scripts); load it unpacked from chrome://extensions`)
