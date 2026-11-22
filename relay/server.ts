@@ -83,9 +83,17 @@ export function createHandler(config: Config) {
       const [ytdlp, ffmpeg] = await Promise.all([toolVersion('yt-dlp'), toolVersion('ffmpeg')])
       tools = { at: Date.now(), ytdlp, ffmpeg }
     }
-    // Twitch needs Bun alone; YouTube and Kick go through yt-dlp.
-    const platforms = tools.ytdlp ? ['twitch', 'youtube', 'kick'] : ['twitch']
-    return { ok: true, version: RELAY_API_VERSION, ytdlp: tools.ytdlp, ffmpeg: tools.ffmpeg, platforms }
+    // Twitch, Kick and YouTube videos need Bun alone, as in the extension (their own APIs); YouTube lives need
+    // yt-dlp, which also backs up the rest.
+    return {
+      ok: true,
+      version: RELAY_API_VERSION,
+      ytdlp: tools.ytdlp,
+      ffmpeg: tools.ffmpeg,
+      platforms: ['twitch', 'youtube', 'kick'],
+      youtubeVideos: true,
+      youtubeLive: tools.ytdlp !== null,
+    }
   }
 
   async function segment(request: Request, streamId: string, segmentId: string, { reply, error }: Replies) {

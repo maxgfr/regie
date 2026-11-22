@@ -57,6 +57,21 @@ export async function openKick(source: { kind: string; id: string }, fetch: Fetc
   return hlsOrigin(url, false, fetch)
 }
 
+/**
+ * The User-Agent of YouTube's iOS app: YouTube turns away a request that says it is the app with another one.
+ * The server relay sends it itself; the extension sets it through a header rule (a page can't).
+ */
+export const YOUTUBE_IOS_UA = 'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)'
+
+/** `fetch` that says it is YouTube's iOS app, for a server: what the extension's header rule does. */
+export function asYouTubeApp(fetch: Fetch): Fetch {
+  return (url, init) => {
+    const headers = new Headers(init?.headers)
+    headers.set('User-Agent', YOUTUBE_IOS_UA)
+    return fetch(url, { ...init, headers })
+  }
+}
+
 /** The client YouTube's iOS app sends: its player answers with an HLS master for videos, without ads. */
 export const YOUTUBE_IOS_CLIENT = {
   clientName: 'IOS',

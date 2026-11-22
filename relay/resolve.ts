@@ -6,6 +6,7 @@ import { rmSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { asYouTubeApp, openKick, openYouTubeVideo } from './hls-origin.ts'
 import { isMasterPlaylist, type MasterEntry, matchEntry, parseMaster, singleVariantMaster } from './playlist.ts'
 import { openTwitch, type RelaySource } from './source.ts'
 import type { Loaded, Origin, Upstream } from './stream.ts'
@@ -273,6 +274,25 @@ export async function openOrigin(source: RelaySource, twitch: Twitch): Promise<O
     } catch (error) {
       // Offline is final; anything else (GQL changed, refused) gets yt-dlp's opinion.
       if (error instanceof UpstreamError && error.status === 404 && source.kind === 'live') throw error
+    }
+  }
+  // Kick and YouTube videos the way the extension plays them (the platforms' own APIs, every quality, no
+  // remux); yt-dlp and ffmpeg only when that fails.
+  if (source.platform === 'kick') {
+    try {
+      return await openKick(source, (url, init) => fetch(url, init))
+    } catch (error) {
+      if (error instanceof UpstreamError && error.status === 404 && source.kind === 'live') throw error
+    }
+  }
+  if (source.platform === 'youtube' && source.kind === 'vod') {
+    try {
+      return await openYouTubeVideo(
+        source.id,
+        asYouTubeApp((url, init) => fetch(url, init)),
+      )
+    } catch {
+      // yt-dlp knows more ways in.
     }
   }
   const resolved = await resolveWithYtdlp(source)

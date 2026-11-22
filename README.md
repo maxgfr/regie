@@ -88,7 +88,7 @@ Clips, TikTok, Vimeo and the rest keep their embeds, and a wall can mix both.
 
 ### Run it
 
-You need [Bun](https://bun.sh). Twitch works with Bun alone; [yt-dlp](https://github.com/yt-dlp/yt-dlp) adds YouTube and Kick, and [ffmpeg](https://ffmpeg.org) YouTube videos.
+You need [Bun](https://bun.sh). Twitch, Kick and YouTube videos work with Bun alone, as in the extension; [yt-dlp](https://github.com/yt-dlp/yt-dlp) adds YouTube lives, and [ffmpeg](https://ffmpeg.org) a fallback for YouTube videos.
 
 ```sh
 bun run relay   # http://127.0.0.1:7878
@@ -129,7 +129,7 @@ Twitch decides ads when it hands out a playback token, from your IP and the play
 ### Trade-offs
 
 - Relayed lives run about 18 to 28 s behind the broadcaster, against a few seconds in the embed. The anti-spoiler holds chat back to match.
-- YouTube videos are remuxed by ffmpeg (no re-encode) at about 1.3× real time: you can seek only within the part already remuxed.
+- YouTube videos play as the HLS YouTube gives its iOS app, every quality, the same way as the extension. When it won't give one, they are remuxed by ffmpeg (no re-encode) at about 1.3× real time, and you can seek only within the part already remuxed.
 - Relayed lives are locked to 1× speed, since speed extensions made them stall. Videos keep any speed.
 
 ### Security

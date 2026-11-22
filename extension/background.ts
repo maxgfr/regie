@@ -5,7 +5,7 @@
  */
 
 import { createRelayHandler, RELAY_API_VERSION } from '../relay/handler.ts'
-import { openKick, openYouTubeVideo } from '../relay/hls-origin.ts'
+import { openKick, openYouTubeVideo, YOUTUBE_IOS_UA } from '../relay/hls-origin.ts'
 import { canonicalize, openTwitch } from '../relay/source.ts'
 import { Relay } from '../relay/stream.ts'
 import { Twitch } from '../relay/twitch.ts'
@@ -49,7 +49,7 @@ const handler = createRelayHandler({
  * for the extension's own requests (no tab), it goes without the extension's Origin and with the app's
  * User-Agent, as yt-dlp sends it.
  */
-const YOUTUBE_IOS_UA = 'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)'
+
 const YOUTUBE_RULES: chrome.declarativeNetRequest.Rule[] = [
   '||www.youtube.com/youtubei/v1/player',
   '||manifest.googlevideo.com/',

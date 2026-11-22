@@ -5,14 +5,14 @@ An optional HLS relay you run yourself. With it, Regie plays Twitch, YouTube and
 What it relays:
 
 - **Twitch** live and VODs, through Twitch's anonymous web API (no account). On an ad break the relay swaps in an ad-free stream (see below).
-- **YouTube** lives (HLS from yt-dlp) and videos (yt-dlp + an ffmpeg remux, no re-encode). YouTube's ads are client-side, so these streams have none.
+- **YouTube** videos as the HLS YouTube's player API gives its iOS app (every quality, no remux), the same way as the extension, with yt-dlp + an ffmpeg remux as a fallback; lives as HLS from yt-dlp. YouTube's ads are client-side, so these streams have none.
 - **Kick** live and VODs (HLS from yt-dlp).
 
 Clips, TikTok, Vimeo and the rest stay on their embeds.
 
 ## Run it locally
 
-You need [Bun](https://bun.sh), plus [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube and Kick and [ffmpeg](https://ffmpeg.org) for YouTube videos. Twitch works with Bun alone.
+You need [Bun](https://bun.sh): Twitch, Kick and YouTube videos work with Bun alone, through the platforms' own APIs, as in the extension. [yt-dlp](https://github.com/yt-dlp/yt-dlp) adds YouTube lives and backs the rest up; [ffmpeg](https://ffmpeg.org) remuxes the YouTube videos the API won't give.
 
 ```sh
 bun run relay      # http://127.0.0.1:7878
@@ -58,12 +58,12 @@ A player type that had ads is left alone for 15 s. Each step is logged on one li
 
 ## HTTP
 
-| Route                            | Answer                                                                                                                                                  |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /health`                    | `{ "ok": true, "version": 1, "ytdlp": "2026.10.26" \| null, "ffmpeg": "9.0.2" \| null, "platforms": ["twitch", …] }` (`youtube` and `kick` need yt-dlp) |
-| `GET /play.m3u8?src=<page URL>`  | The master playlist, every URI pointing back to the relay. 400 unsupported, 404 offline, 502 upstream.                                                  |
-| `GET /v/<stream>/<variant>.m3u8` | A media playlist: rolling window, ads cut, the relay's own sequence. `X-Regie-Ad: 0\|1`.                                                                |
-| `GET /s/<stream>/<segment>`      | The segment, streamed (Range supported).                                                                                                                |
+| Route                            | Answer                                                                                                                                                                          |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`                    | `{ "ok": true, "version": 1, "ytdlp": "2026.10.26" \| null, "ffmpeg": "9.0.2" \| null, "platforms": ["twitch", …] }` plus `youtubeVideos` and `youtubeLive` (lives need yt-dlp) |
+| `GET /play.m3u8?src=<page URL>`  | The master playlist, every URI pointing back to the relay. 400 unsupported, 404 offline, 502 upstream.                                                                          |
+| `GET /v/<stream>/<variant>.m3u8` | A media playlist: rolling window, ads cut, the relay's own sequence. `X-Regie-Ad: 0\|1`.                                                                                        |
+| `GET /s/<stream>/<segment>`      | The segment, streamed (Range supported).                                                                                                                                        |
 
 ## Security
 
