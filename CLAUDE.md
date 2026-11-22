@@ -20,7 +20,7 @@ Static multi-stream viewer deployed on GitHub Pages. Read `PRODUCT.md` (product 
   - The tally is a ring outside the monitor. States go in the label strip (UMD).
   - Side panels dock in the right column. Notices sit between the wall and the console.
 - **Twitch needs 400×300 and visibility** to autoplay. `computeLayout({ boostId })` shows one small tile large next to the main tile for a line check (`store.warmUp`).
-  - A small Twitch player is rendered at 400×300 and scaled down with **`zoom`, never `transform: scale()`**: the player watches itself with an IntersectionObserver (`trackVisibility`), which reports a scaled-down transform as hidden, and Twitch pauses it for good.
+  - A small Twitch player is rendered at 400×300 and scaled down (`scaleStyle()` in `Stage.tsx`). **In Chromium with `zoom`, never `transform: scale()`**: the player watches itself with an IntersectionObserver v2 (`trackVisibility`), which reports a scaled-down transform as hidden, and Twitch pauses it for good. **Elsewhere (Safari, Firefox) with `transform`, never `zoom`**: there is no such observer, and their `zoom` shrinks the frame's own layout below 400×300 (Twitch pauses) and doesn't always lay it out again when it changes.
 - **Mount a player only once its tile has a real size** (`TileView` waits for a rect). A player started hidden or at 0×0 doesn't autoplay.
 - **Third-party calls must never break the room.** Wrap player calls with `safely()`, and have directory and title fetches return `null`/`[]` on failure.
 - **Anonymous only:** no account, OAuth app or API key. Twitch GQL uses the public web client id and is read-only.

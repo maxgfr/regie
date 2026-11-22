@@ -9,6 +9,24 @@ import { platformLabel, sourcePage } from '../platforms/parse.ts'
 import { TWITCH_MIN_HEIGHT, TWITCH_MIN_WIDTH } from '../players/twitch.ts'
 import { Icon } from './Icon.tsx'
 
+/**
+ * Chromium's IntersectionObserver v2 (`trackVisibility`), which Twitch's player watches itself with, reports a
+ * scaled-down `transform` as hidden, and Twitch pauses for good: there, a small player is scaled with `zoom`.
+ * Other engines (Safari, Firefox) have no such observer, and their `zoom` shrinks the frame's own layout
+ * below Twitch's 400×300 (Twitch pauses again) and doesn't always lay it out again when it changes: there,
+ * a `transform`.
+ */
+const SCALE_WITH_ZOOM =
+  typeof IntersectionObserverEntry !== 'undefined' && 'isVisible' in IntersectionObserverEntry.prototype
+
+/** A player rendered at its own size, shown `scale` times smaller (1: as it is). */
+function scaleStyle(scale: number): Record<string, string> {
+  const factor = scale < 1 ? scale : 1
+  return SCALE_WITH_ZOOM
+    ? { zoom: String(factor), transform: 'none' }
+    : { zoom: '1', transform: factor < 1 ? `scale(${factor})` : 'none' }
+}
+
 const UMD = 28
 const GAP = 8
 
@@ -364,9 +382,7 @@ function TileView(handle: Handle<TileProps>) {
     const box = rect ?? { x: 0, y: 0, w: 0, h: 0, overlay: false }
     const screenW = box.w
     const screenH = Math.max(0, box.h - UMD)
-    // Twitch's embed refuses to play below 400×300: render it at that size and scale it down, with `zoom`.
-    // A `transform: scale()` makes the player's IntersectionObserver (`trackVisibility`) report it hidden, and
-    // Twitch pauses it for good.
+    // Twitch's embed refuses to play below 400×300: render it at that size and scale it down (`scaleStyle`).
     const scale = store.embedTwitch(id)
       ? minimumScale({ x: 0, y: 0, w: screenW, h: screenH }, TWITCH_MIN_WIDTH, TWITCH_MIN_HEIGHT)
       : 1
@@ -452,12 +468,8 @@ function TileView(handle: Handle<TileProps>) {
             class="player"
             style={
               fullscreen
-                ? { width: '100%', height: '100%', zoom: '1' }
-                : {
-                    width: `${screenW / scale}px`,
-                    height: `${screenH / scale}px`,
-                    zoom: scale < 1 ? String(scale) : '1',
-                  }
+                ? { width: '100%', height: '100%', ...scaleStyle(1) }
+                : { width: `${screenW / scale}px`, height: `${screenH / scale}px`, ...scaleStyle(scale) }
             }
             mix={tile.source.kind === 'unembeddable' ? undefined : mount}
           />
