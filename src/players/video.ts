@@ -179,12 +179,12 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
   video.addEventListener('timeupdate', () => {
     if (!adOn) events.progress(video.currentTime)
   })
-  let ours = false
+  // The sound Regie last set. `volumechange` fires later, once per property written (the initial sound
+  // above included), so only a sound that differs from it is the viewer's.
+  let expected = { muted: video.muted, volume: video.volume }
   video.addEventListener('volumechange', () => {
-    if (ours) {
-      ours = false
-      return
-    }
+    if (video.muted === expected.muted && video.volume === expected.volume) return
+    expected = { muted: video.muted, volume: video.volume }
     events.userVolume(video.volume, video.muted)
   })
 
@@ -193,9 +193,9 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
       const muted = volume <= 0
       const level = muted ? video.volume : Math.min(1, volume)
       if (muted === video.muted && level === video.volume) return
-      ours = true
       video.muted = muted
       video.volume = level
+      expected = { muted: video.muted, volume: video.volume }
     },
     play() {
       video.play().catch(() => undefined)

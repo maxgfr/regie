@@ -332,6 +332,8 @@ test('muting or unmuting inside a player is followed, not overridden', async ({ 
   const first = page.locator('[data-tile]').first()
   const second = page.locator('[data-tile]').nth(1)
   await expect(first).toHaveAttribute('data-tally', 'pgm')
+  // Using a player's controls activates the page, which allows sound (the script below can't).
+  await page.keyboard.press('Shift')
   // The viewer turns on the second player's sound from its own controls: it goes on air.
   await page.evaluate(() => {
     const video = document.querySelectorAll('[data-tile] video')[1] as HTMLVideoElement
@@ -426,6 +428,19 @@ test('with the relay up, a Twitch stream plays from it, tagged HLS', async ({ pa
   await expect(page.locator('[data-tile] iframe')).toHaveCount(0)
   await page.getByRole('button', { name: 'Help', exact: true }).click()
   await expect(page.getByText('Connected · yt-dlp 2026.10.26 · ffmpeg 7.1')).toBeVisible()
+  await page.unrouteAll({ behavior: 'ignoreErrors' })
+})
+
+test('a relayed stream on air gets its sound: starting muted is not the viewer muting it', async ({ page }) => {
+  await relay(page, { health: true, play: true })
+  await page.goto('/#s=tw.alpha')
+  const video = page.locator('[data-tile] video')
+  await expect(video).toHaveCount(1)
+  // hls.js sets the source later, so the player's own volume changes at its start reach Regie.
+  await page.waitForTimeout(500)
+  await page.keyboard.press('Shift')
+  await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.muted)).toBe(false)
+  await expect(page.locator('[data-tile]').getByRole('button', { name: 'Unmute' })).toHaveCount(0)
   await page.unrouteAll({ behavior: 'ignoreErrors' })
 })
 
