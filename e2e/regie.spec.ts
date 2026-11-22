@@ -240,7 +240,7 @@ test('muting or unmuting inside a player is followed, not overridden', async ({ 
   await page.evaluate(() => {
     ;(document.querySelectorAll('[data-tile] video')[1] as HTMLVideoElement).muted = true
   })
-  await expect(second.getByRole('button', { name: 'Unmute' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(second.getByRole('button', { name: 'Unmute', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await page.waitForTimeout(1500)
   expect(await page.evaluate(() => (document.querySelectorAll('[data-tile] video')[1] as HTMLVideoElement).muted)).toBe(
     true,
@@ -344,7 +344,7 @@ test('a relayed stream on air gets its sound: starting muted is not the viewer m
   await page.waitForTimeout(500)
   await page.keyboard.press('Shift')
   await expect.poll(() => video.evaluate((element: HTMLVideoElement) => element.muted)).toBe(false)
-  await expect(page.locator('[data-tile]').getByRole('button', { name: 'Unmute' })).toHaveCount(0)
+  await expect(page.locator('[data-tile]').getByRole('button', { name: 'Unmute', exact: true })).toHaveCount(0)
   await page.unrouteAll({ behavior: 'ignoreErrors' })
 })
 

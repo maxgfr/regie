@@ -810,9 +810,12 @@ export class Store extends TypedEventTarget<Events> {
     const runtime = this.runtime.get(id)
     if (!runtime) return
     runtime.quality = state
-    const choice = this.#qualityChoice.get(id)
-    if (choice !== undefined && !this.#qualityApplied.has(id) && state.levels.length) {
+    if (!state.levels.length) return
+    // A new player (a remount) first gets the viewer's choice back; after that, whatever the viewer picks in
+    // the player's own menu becomes the choice.
+    if (!this.#qualityApplied.has(id)) {
       this.#qualityApplied.add(id)
+      const choice = this.#qualityChoice.get(id)
       const level = state.levels.find((candidate) => candidate.label === choice)
       const player = this.players.get(id)
       if (level && state.selected === null && player?.setQuality) {
@@ -820,19 +823,9 @@ export class Store extends TypedEventTarget<Events> {
         return
       }
     }
-    this.#emit('change')
-  }
-
-  /** Plays a tile at one of the qualities its player reported, or lets the player choose again (null). */
-  setQuality(id: string, levelId: string | null) {
-    const player = this.players.get(id)
-    const runtime = this.runtime.get(id)
-    if (!player?.setQuality || !runtime?.quality) return
-    const label = runtime.quality.levels.find((level) => level.id === levelId)?.label
+    const label = state.levels.find((level) => level.id === state.selected)?.label
     if (label) this.#qualityChoice.set(id, label)
     else this.#qualityChoice.delete(id)
-    this.#qualityApplied.add(id)
-    safely(() => player.setQuality?.(label ? levelId : null))
   }
 
   /** Players that never started (autoplay refused) get another go on the next user gesture. */

@@ -1,6 +1,7 @@
 import type HlsType from 'hls.js'
 import { qualityLabel } from '../core/quality.ts'
 import { bridgePlaylistLoader, type LoadPlaylist } from './bridge-loader.ts'
+import { createControls } from './hls-controls.ts'
 import type { Player, PlayerContext } from './types.ts'
 
 export interface VideoOptions {
@@ -63,7 +64,8 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
   const video = document.createElement('video')
   video.playsInline = true
   video.autoplay = true
-  video.controls = true
+  // Regie's own bar (`hls-controls.ts`): the native one has no quality menu and no way back to live.
+  video.controls = false
   video.crossOrigin = 'anonymous'
   video.muted = context.initialVolume <= 0 && !soundAllowed()
   video.volume = Math.max(0, Math.min(1, context.initialVolume))
@@ -77,6 +79,19 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
   let recovered = false
   // A relayed video may still be remuxed (YouTube): its start is applied once the relay has got that far.
   let pendingStart = options.src ? source.start : undefined
+  const controls = createControls(container, video, {
+    live: source.kind === 'live',
+    setQuality: (id) => setQuality(id),
+    behind: () => {
+      const edge = hls?.liveSyncPosition
+      return typeof edge === 'number' && Number.isFinite(edge) ? Math.max(0, edge - video.currentTime) : null
+    },
+    goLive: () => {
+      const edge = hls?.liveSyncPosition
+      if (typeof edge === 'number' && Number.isFinite(edge)) video.currentTime = edge
+      video.play().catch(() => undefined)
+    },
+  })
   /** The qualities of the stream hls.js plays, one per name (the best bitrate of each), best first. */
   const reportQuality = () => {
     if (!hls) return
@@ -94,11 +109,22 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
     const current = hls.levels[hls.currentLevel]
     // hls.js keeps the level asked for (-1: its own choice), and moves it when it drops a failing level.
     const manual = hls.manualLevel
-    events.quality({
+    const state = {
       levels,
       selected: manual >= 0 ? String(manual) : null,
       playing: current ? qualityLabel(current.height || 0, current.frameRate || 0) : null,
-    })
+    }
+    controls.quality(state)
+    events.quality(state)
+  }
+
+  const setQuality = (id: string | null) => {
+    if (!hls) return
+    const index = id === null ? -1 : Number(id)
+    if (!Number.isInteger(index) || index >= hls.levels.length) return
+    // `nextLevel` switches from the next segment on, without stopping the picture; -1 is hls.js's own choice.
+    hls.nextLevel = index
+    reportQuality()
   }
 
   /** Before the first picture, the caller can fall back to another player; after it, the stream is offline. */
@@ -160,7 +186,9 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
         instance.on(Hls.Events.FRAG_CHANGED, () => {
           if (!relayed || source.kind !== 'live') return
           const latency = instance.latency
-          if (Number.isFinite(latency) && latency > 0) events.latency(latency)
+          if (!Number.isFinite(latency) || latency <= 0) return
+          controls.latency(latency)
+          events.latency(latency)
         })
         instance.loadSource(url)
         instance.attachMedia(video)
@@ -230,14 +258,7 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
       video.volume = level
       expected = { muted: video.muted, volume: video.volume }
     },
-    setQuality(id) {
-      if (!hls) return
-      const index = id === null ? -1 : Number(id)
-      if (!Number.isInteger(index) || index >= hls.levels.length) return
-      // `nextLevel` switches from the next segment on, without stopping the picture; -1 is hls.js's own choice.
-      hls.nextLevel = index
-      reportQuality()
-    },
+    setQuality,
     play() {
       video.play().catch(() => undefined)
     },
@@ -265,6 +286,7 @@ export function createVideoPlayer(context: PlayerContext, options: VideoOptions 
     destroy() {
       destroyed = true
       unlock.abort()
+      controls.destroy()
       hls?.destroy()
       video.removeAttribute('src')
       video.load()

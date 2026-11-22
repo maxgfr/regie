@@ -46,6 +46,7 @@ const CSS = `
 .regie-controls .live[data-behind="true"]::before{background:var(--amber,#ffb020)}
 .regie-controls .latency{font:400 12px/1 var(--font-mono,'JetBrains Mono',ui-monospace,monospace);
   font-variant-numeric:tabular-nums;color:var(--dim,#9097a0);padding:0 4px;white-space:nowrap}
+.regie-controls [hidden]{display:none}
 .regie-controls .spacer{flex:1 1 auto}
 .regie-controls select{font:400 12px/1 var(--font-mono,'JetBrains Mono',ui-monospace,monospace);
   font-variant-numeric:tabular-nums;max-width:116px;appearance:auto}
