@@ -733,7 +733,7 @@ export class Store extends TypedEventTarget<Events> {
     if (target === EXTENSION_TARGET) {
       return {
         kind: 'extension',
-        remux: false,
+        remux: this.#extensionHealth?.youtubeVideos ?? false,
         platforms: this.#extensionHealth?.platforms ?? EXTENSION_PLATFORMS,
         onFail,
         load: (path, timeoutMs) => extension()?.fetch(path, { timeoutMs }) ?? Promise.resolve(failedReply()),

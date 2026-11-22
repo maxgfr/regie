@@ -57,6 +57,33 @@ describe('relay', () => {
     expect(pickRelay(twitch, { server: null, extension: { ...extension, platforms: null } })).toBe('extension')
   })
 
+  test('an extension that plays Kick and YouTube videos takes them; YouTube lives keep their embed', () => {
+    const kick = { platform: 'kick' as const, kind: 'live' as const, id: 'westcol' }
+    const video = { platform: 'youtube' as const, kind: 'vod' as const, id: 'dQw4w9WgXcQ' }
+    const live = { platform: 'youtube' as const, kind: 'live' as const, id: '4xDzrJKXOOY' }
+    const extension: RelayHealth = {
+      ytdlp: null,
+      ffmpeg: null,
+      platforms: ['twitch', 'kick', 'youtube'],
+      youtubeVideos: true,
+      youtubeLive: false,
+    }
+    expect(pickRelay(kick, { server: null, extension })).toBe('extension')
+    expect(pickRelay(video, { server: null, extension })).toBe('extension')
+    expect(pickRelay(live, { server: null, extension })).toBeNull()
+    // The server, through yt-dlp, plays YouTube lives; videos only with ffmpeg, as before.
+    const server: RelayHealth = { ytdlp: '2026.10.26', ffmpeg: null, platforms: null }
+    expect(pickRelay(live, { server, extension })).toBe('server')
+    expect(pickRelay(video, { server, extension })).toBe('extension')
+    expect(parseHealth({ ok: true, platforms: ['kick'], youtubeVideos: true, youtubeLive: false })).toEqual({
+      ytdlp: null,
+      ffmpeg: null,
+      platforms: ['kick'],
+      youtubeVideos: true,
+      youtubeLive: false,
+    })
+  })
+
   test('the typed address is cleaned', () => {
     expect(normalizeRelayBase('')).toBe('')
     expect(normalizeRelayBase('  ')).toBe('')

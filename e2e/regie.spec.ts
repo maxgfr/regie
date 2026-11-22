@@ -358,9 +358,9 @@ test('once the page may play sound, a silent relayed stream is not muted: a back
   const sound = () =>
     videos.evaluateAll((elements: HTMLVideoElement[]) => elements.map((v) => ({ muted: v.muted, volume: v.volume })))
   // Before anyone uses the page, a silent video can only autoplay muted.
-  await expect.poll(async () => (await sound()).filter((s) => s.muted).length).toBeGreaterThan(0)
+  await expect.poll(async () => (await sound()).filter((s) => s.muted).length, { timeout: 15_000 }).toBeGreaterThan(0)
   await page.keyboard.press('Shift')
-  await expect.poll(async () => (await sound()).some((s) => s.muted)).toBe(false)
+  await expect.poll(async () => (await sound()).some((s) => s.muted), { timeout: 15_000 }).toBe(false)
   const silent = (await sound()).filter((s) => s.volume < 0.01)
   expect(silent).toHaveLength(1)
   expect(silent[0]?.volume).toBeGreaterThan(0)

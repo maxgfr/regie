@@ -17,21 +17,31 @@ export interface RelayHealth {
   ytdlp: string | null
   /** Without ffmpeg the relay can't remux YouTube videos, so those keep their embed. */
   ffmpeg: string | null
-  /** What this relay plays (the extension: Twitch only). Null: an older relay that doesn't say, so all of them. */
+  /** What this relay plays. Null: an older relay that doesn't say, so all of them. */
   platforms: RelayPlatform[] | null
+  /** It plays YouTube videos (the server with ffmpeg; the extension, as YouTube's own HLS). Unset: `ffmpeg` says. */
+  youtubeVideos?: boolean
+  /** It plays YouTube lives (the server through yt-dlp; not the extension). Unset: yes. */
+  youtubeLive?: boolean
 }
 
 /**
  * Whether the relay plays this source: Twitch live and VODs (not clips), YouTube live and videos, Kick.
- * `remux` says the relay can remux YouTube videos (it has ffmpeg); `platforms`, when given, is the list the
- * relay reported, and any other platform keeps its embed.
+ * `remux` says it plays YouTube videos (the server remuxes them with ffmpeg; the extension plays YouTube's own
+ * HLS), `youtubeLive` that it plays YouTube lives; `platforms`, when given, is the list the relay reported,
+ * and any other platform keeps its embed.
  */
-export function relayable(source: Source, remux = true, platforms?: readonly string[] | null): boolean {
+export function relayable(
+  source: Source,
+  remux = true,
+  platforms?: readonly string[] | null,
+  youtubeLive = true,
+): boolean {
   const { platform, kind, id } = source
   if (platforms && !platforms.includes(platform)) return false
   if (platform === 'twitch') return kind === 'live' || kind === 'vod'
   if (platform === 'kick') return kind === 'live' || kind === 'vod'
-  if (platform === 'youtube') return kind === 'live' || (kind === 'vod' && remux && id.length === 11)
+  if (platform === 'youtube') return (kind === 'live' && youtubeLive) || (kind === 'vod' && remux && id.length === 11)
   return false
 }
 
@@ -50,9 +60,19 @@ export function pickRelay(
   relays: { server: RelayHealth | null; extension: RelayHealth | null },
 ): RelayVia | null {
   const { server, extension } = relays
-  if (server && relayable(source, server.ffmpeg !== null, server.platforms)) return 'server'
-  // The extension doesn't remux: it only cuts Twitch's own HLS.
-  if (extension && relayable(source, false, extension.platforms ?? EXTENSION_PLATFORMS)) return 'extension'
+  if (server && relayable(source, server.youtubeVideos ?? server.ffmpeg !== null, server.platforms, server.youtubeLive))
+    return 'server'
+  // The extension has no yt-dlp: no YouTube lives, and YouTube videos only as YouTube's own HLS, when it says so.
+  if (
+    extension &&
+    relayable(
+      source,
+      extension.youtubeVideos ?? false,
+      extension.platforms ?? EXTENSION_PLATFORMS,
+      extension.youtubeLive ?? false,
+    )
+  )
+    return 'extension'
   return null
 }
 
@@ -85,11 +105,24 @@ export function healthUrl(base: string, key: string): string {
 
 /** Reads the relay's `/health` answer; anything else is not a relay. */
 export function parseHealth(body: unknown): RelayHealth | null {
-  const data = body as { ok?: unknown; ytdlp?: unknown; ffmpeg?: unknown; platforms?: unknown } | null
+  const data = body as {
+    ok?: unknown
+    ytdlp?: unknown
+    ffmpeg?: unknown
+    platforms?: unknown
+    youtubeVideos?: unknown
+    youtubeLive?: unknown
+  } | null
   if (!data || typeof data !== 'object' || data.ok !== true) return null
   const version = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, 40) : null)
   const platforms = Array.isArray(data.platforms)
     ? RELAY_PLATFORMS.filter((platform) => (data.platforms as unknown[]).includes(platform))
     : null
-  return { ytdlp: version(data.ytdlp), ffmpeg: version(data.ffmpeg), platforms }
+  const flag = (value: unknown) => (typeof value === 'boolean' ? value : undefined)
+  const health: RelayHealth = { ytdlp: version(data.ytdlp), ffmpeg: version(data.ffmpeg), platforms }
+  const youtubeVideos = flag(data.youtubeVideos)
+  const youtubeLive = flag(data.youtubeLive)
+  if (youtubeVideos !== undefined) health.youtubeVideos = youtubeVideos
+  if (youtubeLive !== undefined) health.youtubeLive = youtubeLive
+  return health
 }

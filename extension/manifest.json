@@ -20,6 +20,10 @@
     "https://*.ttvnw.net/*",
     "https://*.playlist.ttvnw.net/*",
     "https://*.cloudfront.net/*",
+    "https://kick.com/*",
+    "https://*.live-video.net/*",
+    "https://www.youtube.com/*",
+    "https://*.googlevideo.com/*",
     "https://maxgfr.github.io/*",
     "http://localhost/*"
   ],

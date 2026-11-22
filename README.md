@@ -60,16 +60,16 @@ Built for the evening when a tournament runs on five channels at once: the main 
 
 Without the relay or the extension, Regie only uses official embeds, so it can only do what each player allows. The last row is a tile played through the [relay](#ad-free-relay-optional) or the [extension](#browser-extension-optional):
 
-| Platform                  | Volume                         | Seek / delay     | Chat                    | Notes                                                                                              |
-| ------------------------- | ------------------------------ | ---------------- | ----------------------- | -------------------------------------------------------------------------------------------------- |
-| Twitch                    | ✓                              | VODs only        | official frame + merged | live latency from the player                                                                       |
-| YouTube                   | ✓                              | ✓ (live DVR too) | official frame          | titles through oEmbed                                                                              |
-| Kick                      | mute only (reloads the player) | –                | official frame          | live status through Kick's public API                                                              |
-| TikTok                    | mute only                      | ✓                | –                       | videos only: **TikTok LIVE can't be embedded**, it opens in its own window                         |
-| Vimeo                     | ✓                              | –                | –                       |                                                                                                    |
-| Dailymotion               | mute only (reload)             | –                | –                       |                                                                                                    |
-| HLS / MP4 link            | ✓                              | ✓                | –                       | played with hls.js where HLS isn't native                                                          |
-| Through relay / extension | ✓                              | ✓ (lives too)    | unchanged               | Twitch live and VODs, YouTube, Kick (the extension: Twitch only): no ads, latency measured, hls.js |
+| Platform                  | Volume                         | Seek / delay     | Chat                    | Notes                                                                                                        |
+| ------------------------- | ------------------------------ | ---------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Twitch                    | ✓                              | VODs only        | official frame + merged | live latency from the player                                                                                 |
+| YouTube                   | ✓                              | ✓ (live DVR too) | official frame          | titles through oEmbed                                                                                        |
+| Kick                      | mute only (reloads the player) | –                | official frame          | live status through Kick's public API                                                                        |
+| TikTok                    | mute only                      | ✓                | –                       | videos only: **TikTok LIVE can't be embedded**, it opens in its own window                                   |
+| Vimeo                     | ✓                              | –                | –                       |                                                                                                              |
+| Dailymotion               | mute only (reload)             | –                | –                       |                                                                                                              |
+| HLS / MP4 link            | ✓                              | ✓                | –                       | played with hls.js where HLS isn't native                                                                    |
+| Through relay / extension | ✓                              | ✓ (lives too)    | unchanged               | Twitch live and VODs, YouTube, Kick (the extension: all but YouTube lives): no ads, latency measured, hls.js |
 
 - **Ads can't be blocked from a page alone.** Players are other sites, and Twitch puts its ads inside the video itself. Every site that embeds Twitch's player shows its ads. To get rid of them, run the optional [ad-free relay](#ad-free-relay-optional) or install the [Regie extension](#browser-extension-optional).
 - **Extensions, without the relay.** An ad blocker such as [uBlock Origin](https://ublockorigin.com/) works inside Regie's YouTube frames. [TTV LOL PRO](https://github.com/younesaassila/ttv-lol-pro) doesn't act on Regie's embedded Twitch players: it only handles requests from `www.twitch.tv` and `m.twitch.tv` pages. The [Regie extension](#browser-extension-optional) does act on Twitch inside Regie: it runs the same engine as the relay.
@@ -140,7 +140,7 @@ More in [relay/README.md](relay/README.md).
 
 ## Browser extension (optional)
 
-The "Regie relay" Chrome extension runs the same engine as the relay, inside the browser, with nothing to run or configure. It plays **Twitch only** (live and VODs, not clips) as HLS in Regie's own player, without ads, with the same full volume, seek and latency as the relay. YouTube, Kick and the rest keep their embeds unless a server relay is up.
+The "Regie relay" Chrome extension runs the same engine as the relay, inside the browser, with nothing to run or configure. It plays **Twitch** (live and VODs, not clips), **Kick** (live and videos) and **YouTube videos** as HLS in Regie's own player, without ads, with the same full volume, seek and latency as the relay: Kick and Twitch through their own anonymous APIs, YouTube videos as the HLS YouTube gives its iOS app. YouTube lives need yt-dlp, so they keep their embed (with the extension's ad blocking) unless a server relay is up.
 
 Download `regie-extension.zip` from the [latest release](https://github.com/maxgfr/regie/releases/latest) and unzip it, or build it yourself:
 
@@ -152,7 +152,7 @@ Then open `chrome://extensions`, turn on Developer mode, click "Load unpacked" a
 
 Each push to `main` that changes something for users is released: the version comes from the commit messages (`feat` → minor, `fix` → patch), and the release on GitHub gets its notes and the extension's zip, built with that version.
 
-- **A server relay wins.** When a relay is set in the help sheet and answers, every tile it can play goes through it; the extension takes the Twitch tiles only when no relay is up.
+- **A server relay wins.** When a relay is set in the help sheet and answers, every tile it can play goes through it; the extension takes the tiles it plays when no relay is up.
 - **No extension, no change.** Without it (or once it is disabled or reloaded), Twitch tiles keep their official embed, and a stream the extension can't play falls back to its embed in place.
 - **Twitch embeds keep their ad in a background tab.** On Regie's pages, the extension makes the embedded Twitch players see a visible tab, so an ad on an embed (a fallback, a clip) keeps running to its end when you switch tabs.
 - **On twitch.tv too, in Regie's player.** On a channel or video page of `www.twitch.tv`, the extension plays the stream in Regie's own HLS player, on top of Twitch's (paused and muted underneath), with the same engine: no ads, the quality menu, back to live, picture in picture, and it keeps playing in a background tab and in Twitch's small corner player while you browse the site. When every high-quality stream has a pre-roll (some channels, some days), it shows the ad-free 360p stream until the ad is over, then goes back to the chosen quality on its own. An offline channel, or a stream it can't play, gets Twitch's player back. Underneath, Twitch's own player is also kept ad-free (its worker gets the engine first, with backups in the codec it decodes), for the pages Regie's player leaves alone, such as clips.
@@ -165,6 +165,8 @@ What it asks for, and why:
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `gql.twitch.tv`, `usher.ttvnw.net`, `*.ttvnw.net`                  | The anonymous playback token and the playlists, as the relay asks for them.                                                                               |
 | `*.cloudfront.net`                                                 | Twitch also serves playlists and segments from CloudFront.                                                                                                |
+| `kick.com`, `*.live-video.net`                                     | Kick's public channel and video API, and its playlists.                                                                                                   |
+| `www.youtube.com`, `*.googlevideo.com`                             | YouTube's player API (asked as its iOS app, which gets HLS), the playlists and the segments.                                                              |
 | `declarativeNetRequest`                                            | Adds `Access-Control-Allow-Origin` to Twitch's video responses for Regie's pages, and blocks ad networks for Regie, twitch.tv and Regie's YouTube embeds. |
 | `maxgfr.github.io`, `localhost:5173`, `localhost:4173` (scripts)   | The bridge between Regie's page and the extension, and the visible-tab fix in Twitch's player there.                                                      |
 | `www.twitch.tv`, `m.twitch.tv` (scripts, a stylesheet)             | Regie's player on channel and video pages, Twitch's player worker started with the engine first, and twitch.tv's ad slots hidden.                         |
