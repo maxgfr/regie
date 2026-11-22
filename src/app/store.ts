@@ -1058,6 +1058,29 @@ export class Store extends TypedEventTarget<Events> {
     this.changed(false)
   }
 
+  /**
+   * A second player of a tile, for the mini control room: Regie's own HLS player when the tile plays through
+   * the relay or the extension (with sound), or null when it plays its official embed (the caller embeds it).
+   */
+  miniPlayer(id: string, container: HTMLElement, onFail: () => void): Player | null {
+    const tile = this.tile(id)
+    const target = tile ? this.#relayTarget(tile) : ''
+    if (!tile || !target) return null
+    const ignore = () => undefined
+    return (
+      safely(() =>
+        createPlayer({
+          source: tile.source,
+          container,
+          host: this.#host,
+          initialVolume: 1,
+          relay: this.#playerRelay(target, onFail),
+          events: { state: ignore, latency: ignore, userVolume: ignore, quality: ignore },
+        }),
+      ) ?? null
+    )
+  }
+
   #applyAudio(immediate = false) {
     const target = this.ui.soundAllowed && !this.ui.miniRegie ? this.#targetVolumes() : {}
     // Sent again as it is, without a fade: a fade from silence would dip the sound at every rebuffer.

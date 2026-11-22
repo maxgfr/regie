@@ -2,6 +2,7 @@ import type { Store } from '../app/store.ts'
 import { t } from '../i18n/index.ts'
 import { embedUrl } from '../platforms/embed.ts'
 import { capabilities } from '../platforms/parse.ts'
+import type { Player } from '../players/index.ts'
 
 declare global {
   interface Window {
@@ -19,6 +20,8 @@ const CSS = `
   html,body{margin:0;height:100%;background:#0b0c0d;color:#e6e8e3;font:14px/1.3 'Barlow Condensed','Barlow',system-ui,sans-serif}
   body{display:flex;flex-direction:column}
   iframe,video{flex:1 1 auto;width:100%;min-height:0;border:0;background:#000;display:block}
+  .screen{flex:1 1 auto;min-height:0;position:relative;background:#000}
+  .screen video{position:absolute;inset:0;height:100%}
   nav{flex:none;display:flex;gap:4px;padding:6px;background:#141618;overflow-x:auto}
   button{flex:none;display:flex;align-items:center;gap:6px;max-width:160px;height:28px;padding:0 10px;border:1px solid #000;
     border-radius:4px;background:#1d2023;color:#9aa1a9;font:600 13px 'Barlow Condensed',system-ui,sans-serif;
@@ -57,6 +60,10 @@ export async function openMiniRegie(store: Store) {
   }
   let shownId: string | null = null
   let player: HTMLElement | null = null
+  /** Regie's own player in the window, when the stream plays through the relay or the extension. */
+  let ours: Player | null = null
+  /** Streams Regie's player couldn't start here: they keep their official embed. */
+  const failed = new Set<string>()
   const nav = doc.createElement('nav')
   nav.setAttribute('aria-label', t('console.pgm'))
 
@@ -65,7 +72,26 @@ export async function openMiniRegie(store: Store) {
     if (!tile || tile.id === shownId) return
     shownId = tile.id
     player?.remove()
-    if (tile.source.platform === 'video') {
+    ours?.destroy()
+    ours = null
+    // Through the relay or the extension: Regie's own HLS player, without ads, with its controls.
+    const screen = doc.createElement('div')
+    screen.className = 'screen'
+    const shown = tile.id
+    ours = failed.has(tile.id)
+      ? null
+      : store.miniPlayer(tile.id, screen, () =>
+          // It never started there: the official embed takes its place.
+          setTimeout(() => {
+            if (shownId !== shown) return
+            shownId = null
+            failed.add(shown)
+            show(shown)
+          }, 0),
+        )
+    if (ours) {
+      player = screen
+    } else if (tile.source.platform === 'video') {
       const video = doc.createElement('video')
       video.src = tile.source.id
       video.autoplay = true
@@ -116,6 +142,7 @@ export async function openMiniRegie(store: Store) {
   }
   store.addEventListener('change', onChange)
   pip.addEventListener('pagehide', () => {
+    ours?.destroy()
     store.removeEventListener('change', onChange)
     store.setMiniRegie(false)
   })
