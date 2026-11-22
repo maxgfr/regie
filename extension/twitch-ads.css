@@ -1,0 +1,10 @@
+/* twitch.tv's display ads (banners on Browse and in the channel grid, the stream's side ads): their slots are
+   hidden, as uBlock Origin's cosmetic filters do; the network rules (ads.json) stop what they load. */
+[data-a-target$="-ad-slot"],
+[data-a-target="video-ad-label"],
+[data-a-target="video-ad-countdown"],
+[data-test-selector="sda-wrapper"],
+.stream-display-ad__container,
+iframe[src*="d3qpnbd0lnus53.cloudfront.net"] {
+  display: none !important;
+}

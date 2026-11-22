@@ -84,6 +84,7 @@ await Bun.write(`${out}/manifest.json`, `${JSON.stringify(manifest, null, 2)}\n`
 await cp('extension/rules.json', `${out}/rules.json`)
 // uBlock-style blocking of ad networks, for requests from Regie, twitch.tv and Regie's YouTube embeds.
 await cp('extension/ads.json', `${out}/ads.json`)
+await cp('extension/twitch-ads.css', `${out}/twitch-ads.css`)
 // Rendered from `public/icon.svg` with transparent corners by `scripts/extension-icons.ts`.
 await cp('extension/icons', `${out}/icons`, { recursive: true })
 console.log(

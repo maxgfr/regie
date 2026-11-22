@@ -13,7 +13,10 @@
         "adnxs.com",
         "adsrvr.org",
         "moatads.com",
-        "scorecardresearch.com"
+        "scorecardresearch.com",
+        "advertising.amazon.dev",
+        "tq-tungsten.com",
+        "d3qpnbd0lnus53.cloudfront.net"
       ],
       "initiatorDomains": ["maxgfr.github.io", "localhost", "twitch.tv", "youtube-nocookie.com"]
     }

@@ -48,6 +48,11 @@
       "run_at": "document_idle"
     },
     {
+      "matches": ["https://www.twitch.tv/*", "https://m.twitch.tv/*"],
+      "css": ["twitch-ads.css"],
+      "run_at": "document_start"
+    },
+    {
       "matches": ["https://www.youtube-nocookie.com/embed/*", "https://www.youtube.com/embed/*"],
       "js": ["youtube-ads.js"],
       "world": "MAIN",
